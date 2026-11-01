@@ -152,13 +152,14 @@ onboard every domain you will send from.
 
 ```bash
 npx wrangler email routing enable example.com     # adds Cloudflare's MX and SPF records
-npx wrangler email routing rules update example.com catch-all \
-  --action-type worker --action-value leanmail --enabled true
 ```
 
-Or in the dashboard: **Email → Email Routing → Routing rules → Catch-all address → Send to a
-Worker → leanmail**. The Worker's name is what the rule points at, which is why `wrangler.jsonc`
-says not to rename it.
+Then point the catch-all at the Worker in the dashboard: **Email → Email Routing → Routing rules →
+Catch-all address → Edit → Send to a Worker → leanmail**, enabled. (Wrangler cannot do this step:
+`email routing rules update <domain> catch-all --action-type worker` is refused with "Catch-all
+rule only supports 'forward' or 'drop' action types", as of wrangler 4.156.) Check it with
+`npx wrangler email routing rules get example.com catch-all`. The Worker's name is what the rule
+points at, which is why `wrangler.jsonc` says not to rename it.
 
 The Worker then decides per address, from the routes your account projects into D1 (exact
 address, then `user+tag` without the tag, then the domain's default): keep, keep and forward,
