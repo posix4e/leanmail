@@ -1,0 +1,19 @@
+From: Ana Ruiz <ana@studio-ruiz.example>
+To: alex@wuli.nu
+Subject: Logo options, round two
+Date: Sun, 13 Sep 2026 14:32:12 +0000
+Message-ID: <12@example.test>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset=utf-8
+
+Round two of the logo options. The third one is my favourite.
+
+--b1
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Round two of the <b>logo options</b>. The third one is my favourite.</p><p><img src="https://example.test/track.gif" width="1" height="1"><a href="https://studio-ruiz.example/round2">See the board</a></p><script>alert(1)</script></body></html>
+
+--b1--

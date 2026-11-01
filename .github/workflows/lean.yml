@@ -1,0 +1,87 @@
+name: lean
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system libraries
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libssl-dev
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Cache Lake build
+        uses: actions/cache@v4
+        with:
+          path: lean/.lake
+          key: lake-${{ runner.os }}-${{ hashFiles('lean/lean-toolchain', 'lean/lakefile.lean', 'lean/lake-manifest.json') }}
+      - name: Build
+        working-directory: lean
+        run: lake build leanmail-server leanmail core-test address-test ical-test junk-test server-test
+      - name: Core tests
+        working-directory: lean
+        run: ./.lake/build/bin/core-test
+      - name: Address tests
+        working-directory: lean
+        run: ./.lake/build/bin/address-test
+      - name: iCalendar tests
+        working-directory: lean
+        run: ./.lake/build/bin/ical-test
+      - name: Junk tests
+        working-directory: lean
+        run: ./.lake/build/bin/junk-test
+      - name: Server tests
+        working-directory: lean
+        run: ./.lake/build/bin/server-test
+      - name: CLI smoke (the CLI against a bare server)
+        run: make cli-smoke
+      # docs/SPEC.md is generated from the passing test names (scripts/spec.sh); the Worker's
+      # suite is part of it, so this job needs node too.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - working-directory: worker
+        run: npm ci
+      - name: SPEC.md is current
+        run: ./scripts/spec.sh --check --no-build
+
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - working-directory: worker
+        run: npm ci
+      - working-directory: worker
+        run: npm run typecheck
+      - working-directory: worker
+        run: npm test
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache the Lean toolchain tarball
+        uses: actions/cache@v4
+        with:
+          path: server/.cache
+          key: toolchain-${{ hashFiles('lean/lean-toolchain', 'Makefile') }}
+      - name: Fetch the toolchain and build the container image
+        run: make toolchain-cache && docker build --platform linux/amd64 -f server/Dockerfile -t leanmail-server:ci .
+      - name: Smoke-run it
+        run: |
+          docker run -d --name lm -p 8080:8080 leanmail-server:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:8080/health | tee health.json
+          grep -q '"fts5":true' health.json
+          docker stop lm

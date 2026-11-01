@@ -1,0 +1,18 @@
+# Litestream: the account's SQLite file, streamed to R2 under db/<account id>/.
+# Credentials come from LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY (set by entrypoint.sh).
+logging:
+  level: info
+  type: json
+snapshot:
+  interval: 24h
+  retention: 168h
+dbs:
+  - path: ${DATA_DIR}/mail.db
+    replica:
+      type: s3
+      bucket: ${R2_BUCKET}
+      path: db/${ACCOUNT_ID}
+      endpoint: ${R2_ENDPOINT}
+      region: auto
+      force-path-style: true
+      sync-interval: 1s

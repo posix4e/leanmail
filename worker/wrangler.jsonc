@@ -1,0 +1,64 @@
+{
+  // The Worker's name is bound to Email Routing rules once a domain points at it. Do not rename.
+  "name": "leanmail",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  "containers": [
+    {
+      "class_name": "MailContainer",
+      "image": "../server/Dockerfile",
+      "image_build_context": "..",
+      "instance_type": "basic",
+      "max_instances": 50
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "MAIL", "class_name": "MailContainer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MailContainer"] }],
+
+  // D1 `leanmail-ctl`: projection tables only (accounts, domains, routes, forward_window).
+  // `wrangler d1 create leanmail-ctl` prints the id; set it here before the first deploy.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "leanmail-ctl",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // The spool: raw/<acct>/<ulid> (source of truth) and in/<acct>/<ulid> markers.
+  "r2_buckets": [{ "binding": "RAW", "bucket_name": "leanmail-mail" }],
+  // Email Sending for /internal/email/send.
+  "send_email": [{ "name": "EMAIL" }],
+  // Daily only; short cadences come from the container's X-Next-Wake header.
+  "triggers": { "crons": ["0 4 * * *"] },
+
+  // Plain settings. Edit them for your install (docs/SELF-HOSTING.md):
+  //   PUBLIC_ORIGIN           the https origin people use, e.g. https://mail.example.com (no trailing slash)
+  //   SIGNUP_MODE             approve (an admin approves each sign-up), open, or closed
+  //   RETENTION_DAYS_DEFAULT  days until newly stored mail expires, for accounts that have not set their own
+  //   ADMIN_EMAILS            comma-separated; a sign-up from one of these is approved at once, as an admin
+  "vars": {
+    "PUBLIC_ORIGIN": "http://127.0.0.1:8787",
+    "SIGNUP_MODE": "approve",
+    "RETENTION_DAYS_DEFAULT": "90"
+  }
+  // DEV_ACCOUNT is NOT a var here: it lives in worker/.dev.vars, which only `wrangler dev` reads.
+  // It must never be set in production (the Worker also ignores it unless the host is localhost).
+  //
+  // Secrets, set once with `npx wrangler secret put <NAME>` (never in this file, never by CI):
+  //   required  SESSION_SECRET, INTERNAL_SECRET (random, 32+ bytes each), MAIL_FROM,
+  //             R2_BUCKET, R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY (Litestream + the spool)
+  //   optional  APNS_TEAM_ID, APNS_KEY_ID, APNS_KEY_P8, APNS_TOPIC (push to the iOS app)
+  //             AI_BASE_URL, AI_API_KEY, AI_MODEL (an OpenAI-compatible endpoint)
+  //             CF_API_TOKEN, CF_ACCOUNT_ID (the routing page applies Email Routing changes itself)
+  //             GOOGLE_PUBSUB_TOPIC (Gmail push)
+  //
+  // No `assets` binding: the container serves /static/* (lean/Server/Static.lean) from web/, which
+  // the image copies to /opt/leanmail/web, and the Worker sends signed-out /static/* to the
+  // operator's container. One copy of web/, versioned with the server that renders the pages.
+}

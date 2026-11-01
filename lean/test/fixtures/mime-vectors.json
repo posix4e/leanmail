@@ -1,0 +1,347 @@
+{
+ "note": "buildParts(PostalMime.parse(raw)) for each raw message (base64): the parts record the Worker seals. A port parsing raw on a device should produce the same text, html and attachments (name, mime, size, cid, inline, method, data).",
+ "cases": [
+  {
+   "name": "eml/01.eml",
+   "raw": "RnJvbTogTWF5YSBMaW5kcXZpc3QgPG1heWFAbm9yZGljLXByZXNzLmV4YW1wbGU+DQpUbzogYWxleEB3dWxpLm51DQpTdWJqZWN0OiBQcm9vZiBwYWdlcyBmb3IgdGhlIGF1dHVtbiBjYXRhbG9ndWUNCkRhdGU6IFN1biwgMTMgU2VwIDIwMjYgMTQ6MzI6MTIgKzAwMDANCk1lc3NhZ2UtSUQ6IDwwMUBleGFtcGxlLnRlc3Q+DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXV0Zi04DQoNCkhpIEFsZXgsCgpUaGUgcHJvb2YgcGFnZXMgYXJlIGF0dGFjaGVkIHRvIHRoZSBzaGFyZWQgZm9sZGVyLiBUaHJlZSBzcHJlYWRzIHN0aWxsIG5lZWQgdGhlIGNvbG91ciBwYXNzOyB0aGUgcmVzdCBjYW4gZ28gdG8gcHJpbnQgb24gVGh1cnNkYXkgaWYgeW91IHNpZ24gb2ZmLgoKTWF5YQ0K",
+   "parts": {
+    "v": 1,
+    "text": "Hi Alex,\n\nThe proof pages are attached to the shared folder. Three spreads still need the colour pass; the rest can go to print on Thursday if you sign off.\n\nMaya\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/02.eml",
+   "raw": "RnJvbTogQ2FwaXRhbCBPbmUgPG5vLXJlcGx5QG5vdGlmaWNhdGlvbi5jYXBpdGFsb25lLmV4YW1wbGU+DQpUbzogY2FwaXRhbG9uZUB3dWxpLm51DQpTdWJqZWN0OiBZb3VyIHN0YXRlbWVudCBpcyByZWFkeQ0KRGF0ZTogU2F0LCAxMiBTZXAgMjAyNiAxNDozMjoxMiArMDAwMA0KTWVzc2FnZS1JRDogPDAyQGV4YW1wbGUudGVzdD4NCkxpc3QtVW5zdWJzY3JpYmU6IDxtYWlsdG86dW5zdWJAZXhhbXBsZS50ZXN0Pg0KUHJlY2VkZW5jZTogYnVsaw0KTUlNRS1WZXJzaW9uOiAxLjANCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsgY2hhcnNldD11dGYtOA0KDQpZb3VyIFNlcHRlbWJlciBzdGF0ZW1lbnQgaXMgYXZhaWxhYmxlLiBNaW5pbXVtIHBheW1lbnQgZHVlIDUgT2N0b2Jlci4NCg==",
+   "parts": {
+    "v": 1,
+    "text": "Your September statement is available. Minimum payment due 5 October.\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/03.eml",
+   "raw": "RnJvbTogRHIuIE9zZWkgPG9mZmljZUBoYXJib3VyY2xpbmljLmV4YW1wbGU+DQpUbzogYWxleEB3dWxpLm51DQpTdWJqZWN0OiBSZTogZm9sbG93LXVwIGFwcG9pbnRtZW50DQpEYXRlOiBGcmksIDExIFNlcCAyMDI2IDE0OjMyOjEyICswMDAwDQpNZXNzYWdlLUlEOiA8MDNAZXhhbXBsZS50ZXN0Pg0KTUlNRS1WZXJzaW9uOiAxLjANCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsgY2hhcnNldD11dGYtOA0KDQpUaGFua3Mg4oCUIFR1ZXNkYXkgYXQgMTA6NDAgd29ya3MuIFBsZWFzZSBhcnJpdmUgdGVuIG1pbnV0ZXMgZWFybHkgZm9yIHRoZSBmb3Jtcy4KCuKAlCBIYXJib3VyIENsaW5pYw0K",
+   "parts": {
+    "v": 1,
+    "text": "Thanks — Tuesday at 10:40 works. Please arrive ten minutes early for the forms.\n\n— Harbour Clinic\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/04.eml",
+   "raw": "RnJvbTogSHlwZXJsaXF1aWQgPGFsZXJ0c0BoeXBlcmxpcXVpZC5leGFtcGxlPg0KVG86IGh5cGVybGlxdWlkQGZyYWxleC5hcnQNClN1YmplY3Q6IFdpdGhkcmF3YWwgY29uZmlybWVkDQpEYXRlOiBUaHUsIDEwIFNlcCAyMDI2IDE0OjMyOjEyICswMDAwDQpNZXNzYWdlLUlEOiA8MDRAZXhhbXBsZS50ZXN0Pg0KTUlNRS1WZXJzaW9uOiAxLjANCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsgY2hhcnNldD11dGYtOA0KDQpBIHdpdGhkcmF3YWwgb2YgMC4yNSBFVEggd2FzIGNvbmZpcm1lZCBhdCAxNDowMiBVVEMuDQo=",
+   "parts": {
+    "v": 1,
+    "text": "A withdrawal of 0.25 ETH was confirmed at 14:02 UTC.\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/05.eml",
+   "raw": "RnJvbTogVG9tYXMgUmV5ZXMgPHRvbWFzQGxhYmVsZm9yZ2UuaW8+DQpUbzogaW5mb0BsYWJlbGZvcmdlLmlvDQpTdWJqZWN0OiBRdW90ZSBmb3IgNTAwIHVuaXRzLCBtYXR0ZSBmaW5pc2gNCkRhdGU6IFdlZCwgMDkgU2VwIDIwMjYgMTQ6MzI6MTIgKzAwMDANCk1lc3NhZ2UtSUQ6IDwwNUBleGFtcGxlLnRlc3Q+DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXV0Zi04DQoNCkNvdWxkIHlvdSBzZW5kIHRoZSB1bml0IHByaWNlIGZvciA1MDAgbWF0dGUgbGFiZWxzLCA2MHg0MG1tLCB0d28gY29sb3Vycz8gV2Ugd291bGQgbmVlZCB0aGVtIGJ5IHRoZSAzMHRoLg0K",
+   "parts": {
+    "v": 1,
+    "text": "Could you send the unit price for 500 matte labels, 60x40mm, two colours? We would need them by the 30th.\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/06.eml",
+   "raw": "RnJvbTogR2l0SHViIDxub3JlcGx5QGdpdGh1Yi5leGFtcGxlPg0KVG86IGFsZXhAZnJhbGV4LmFydA0KU3ViamVjdDogW3Bvc2l4NGUvbWFpbHZhdWx0XSBEZXBsb3kgc3VjY2VlZGVkDQpEYXRlOiBUdWUsIDA4IFNlcCAyMDI2IDE0OjMyOjEyICswMDAwDQpNZXNzYWdlLUlEOiA8MDZAZXhhbXBsZS50ZXN0Pg0KQXV0by1TdWJtaXR0ZWQ6IGF1dG8tZ2VuZXJhdGVkDQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXV0Zi04DQoNCldvcmtmbG93IGRlcGxveSBjb21wbGV0ZWQgc3VjY2Vzc2Z1bGx5IG9uIG1haW4gKGExYjJjM2QpLg0K",
+   "parts": {
+    "v": 1,
+    "text": "Workflow deploy completed successfully on main (a1b2c3d).\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/07.eml",
+   "raw": "RnJvbTogTmFkaWEgRmVycmVpcmEgPG5hZGlhQGZlcnJlaXJhLWFyY2guZXhhbXBsZT4NClRvOiBhbGV4QGZyYWxleC5hcnQNClN1YmplY3Q6IFNpdGUgdmlzaXQgcGhvdG9zDQpEYXRlOiBNb24sIDA3IFNlcCAyMDI2IDE0OjMyOjEyICswMDAwDQpNZXNzYWdlLUlEOiA8MDdAZXhhbXBsZS50ZXN0Pg0KTUlNRS1WZXJzaW9uOiAxLjANCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsgY2hhcnNldD11dGYtOA0KDQpQaG90b3MgZnJvbSBGcmlkYXkncyBzaXRlIHZpc2l0LiBUaGUgbm9ydGggd2FsbCBjcmFjayBoYXMgd2lkZW5lZCBzaW5jZSBNYXkg4oCUIHNlZSAwNyBhbmQgMDguDQo=",
+   "parts": {
+    "v": 1,
+    "text": "Photos from Friday's site visit. The north wall crack has widened since May — see 07 and 08.\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/08.eml",
+   "raw": "RnJvbTogU2Nod2FiIDxhbGVydHNAc2Nod2FiLmV4YW1wbGU+DQpUbzogY2hhcmxlc3NjaHdhYkB3dWxpLm51DQpTdWJqZWN0OiBUcmFkZSBjb25maXJtYXRpb24NCkRhdGU6IEZyaSwgMDQgU2VwIDIwMjYgMTQ6MzI6MTIgKzAwMDANCk1lc3NhZ2UtSUQ6IDwwOEBleGFtcGxlLnRlc3Q+DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXV0Zi04DQoNCllvdXIgb3JkZXIgdG8gYnV5IDEwIHNoYXJlcyB3YXMgZXhlY3V0ZWQuDQo=",
+   "parts": {
+    "v": 1,
+    "text": "Your order to buy 10 shares was executed.\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/09.eml",
+   "raw": "RnJvbTogQmVuIE9rYWZvciA8YmVuQG9rYWZvci5leGFtcGxlPg0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogRGlubmVyIFNhdHVyZGF5Pw0KRGF0ZTogVHVlLCAwMSBTZXAgMjAyNiAxNDozMjoxMiArMDAwMA0KTWVzc2FnZS1JRDogPDA5QGV4YW1wbGUudGVzdD4NCk1JTUUtVmVyc2lvbjogMS4wDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW47IGNoYXJzZXQ9dXRmLTgNCg0KV2UncmUgZG9pbmcgYSB0aGluZyBhdCBvdXJzIG9uIFNhdHVyZGF5IGFyb3VuZCA3LiBCcmluZyBub3RoaW5nLiBXZWxsLCBicmluZyB0aGUgZ29vZCBvbGl2ZXMuDQo=",
+   "parts": {
+    "v": 1,
+    "text": "We're doing a thing at ours on Saturday around 7. Bring nothing. Well, bring the good olives.\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/10.eml",
+   "raw": "RnJvbTogS3Jha2VuIDxuby1yZXBseUBrcmFrZW4uZXhhbXBsZT4NClRvOiBrcmFrZW5Ad3VsaS5udQ0KU3ViamVjdDogU2lnbi1pbiBmcm9tIGEgbmV3IGRldmljZQ0KRGF0ZTogTW9uLCAyNCBBdWcgMjAyNiAxNDozMjoxMiArMDAwMA0KTWVzc2FnZS1JRDogPDEwQGV4YW1wbGUudGVzdD4NCk1JTUUtVmVyc2lvbjogMS4wDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW47IGNoYXJzZXQ9dXRmLTgNCg0KQSBzaWduLWluIGZyb20gYSBuZXcgZGV2aWNlIHdhcyBkZXRlY3RlZC4gSWYgdGhpcyB3YXMgbm90IHlvdSwgc2VjdXJlIHlvdXIgYWNjb3VudC4NCg==",
+   "parts": {
+    "v": 1,
+    "text": "A sign-in from a new device was detected. If this was not you, secure your account.\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/11.eml",
+   "raw": "RnJvbTogT2xkIE5ld3NsZXR0ZXIgPG5ld3NAb2xkbGlzdC5leGFtcGxlPg0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogSXNzdWUgIzIxMjogdGhlIGxvbmcgdGFpbA0KRGF0ZTogVGh1LCAyNSBKdW4gMjAyNiAxNDozMjoxMiArMDAwMA0KTWVzc2FnZS1JRDogPDExQGV4YW1wbGUudGVzdD4NCkxpc3QtSWQ6IDxvbGRsaXN0LmV4YW1wbGU+DQpQcmVjZWRlbmNlOiBsaXN0DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXV0Zi04DQoNClRoaXMgaXNzdWU6IHRoZSBsb25nIHRhaWwgb2YgZXZlcnl0aGluZy4NCg==",
+   "parts": {
+    "v": 1,
+    "text": "This issue: the long tail of everything.\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/12.eml",
+   "raw": "RnJvbTogQW5hIFJ1aXogPGFuYUBzdHVkaW8tcnVpei5leGFtcGxlPg0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogTG9nbyBvcHRpb25zLCByb3VuZCB0d28NCkRhdGU6IFN1biwgMTMgU2VwIDIwMjYgMTQ6MzI6MTIgKzAwMDANCk1lc3NhZ2UtSUQ6IDwxMkBleGFtcGxlLnRlc3Q+DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvYWx0ZXJuYXRpdmU7IGJvdW5kYXJ5PSJiMSINCg0KLS1iMQ0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXV0Zi04DQoNClJvdW5kIHR3byBvZiB0aGUgbG9nbyBvcHRpb25zLiBUaGUgdGhpcmQgb25lIGlzIG15IGZhdm91cml0ZS4NCg0KLS1iMQ0KQ29udGVudC1UeXBlOiB0ZXh0L2h0bWw7IGNoYXJzZXQ9dXRmLTgNCg0KPGh0bWw+PGJvZHk+PHA+Um91bmQgdHdvIG9mIHRoZSA8Yj5sb2dvIG9wdGlvbnM8L2I+LiBUaGUgdGhpcmQgb25lIGlzIG15IGZhdm91cml0ZS48L3A+PHA+PGltZyBzcmM9Imh0dHBzOi8vZXhhbXBsZS50ZXN0L3RyYWNrLmdpZiIgd2lkdGg9IjEiIGhlaWdodD0iMSI+PGEgaHJlZj0iaHR0cHM6Ly9zdHVkaW8tcnVpei5leGFtcGxlL3JvdW5kMiI+U2VlIHRoZSBib2FyZDwvYT48L3A+PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0PjwvYm9keT48L2h0bWw+DQoNCi0tYjEtLQ0K",
+   "parts": {
+    "v": 1,
+    "text": "Round two of the logo options. The third one is my favourite.\n\n",
+    "html": "<html><body><p>Round two of the <b>logo options</b>. The third one is my favourite.</p><p><img src=\"https://example.test/track.gif\" width=\"1\" height=\"1\"><a href=\"https://studio-ruiz.example/round2\">See the board</a></p><script>alert(1)</script></body></html>\n\n",
+    "attachments": []
+   }
+  },
+  {
+   "name": "eml/13.eml",
+   "raw": "RnJvbTogTWF5YSBMaW5kcXZpc3QgPG1heWFAbm9yZGljLXByZXNzLmV4YW1wbGU+DQpUbzogYWxleEB3dWxpLm51DQpTdWJqZWN0OiBJbnZvaWNlIDIwMjYtMDkxMg0KRGF0ZTogU2F0LCAxMiBTZXAgMjAyNiAxNDozMjoxMiArMDAwMA0KTWVzc2FnZS1JRDogPDEzQGV4YW1wbGUudGVzdD4NCk1JTUUtVmVyc2lvbjogMS4wDQpDb250ZW50LVR5cGU6IG11bHRpcGFydC9taXhlZDsgYm91bmRhcnk9ImIyIg0KDQotLWIyDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW47IGNoYXJzZXQ9dXRmLTgNCg0KSW52b2ljZSBhdHRhY2hlZC4gTmV0IDMwLg0KDQotLWIyDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL3BkZjsgbmFtZT0iaW52b2ljZS0yMDI2LTA5MTIucGRmIg0KQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudDsgZmlsZW5hbWU9Imludm9pY2UtMjAyNi0wOTEyLnBkZiINCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IGJhc2U2NA0KDQpKVkJFUmkweExqUUtKY09rdzd6RHRzT2ZDakVnTUNCdlltb0tQRHd2Vkhsd1pTOURZWFJoYkc5blBqNEtaVzVrYjJKcUNnPT0NCg0KLS1iMi0tDQo=",
+   "parts": {
+    "v": 1,
+    "text": "Invoice attached. Net 30.\n\n",
+    "html": null,
+    "attachments": [
+     {
+      "name": "invoice-2026-0912.pdf",
+      "mime": "application/pdf",
+      "size": 52,
+      "cid": "",
+      "inline": false,
+      "data": "JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwvVHlwZS9DYXRhbG9nPj4KZW5kb2JqCg=="
+     }
+    ]
+   }
+  },
+  {
+   "name": "eml/14.eml",
+   "raw": "RnJvbTogTmFkaWEgRmVycmVpcmEgPG5hZGlhQGZlcnJlaXJhLWFyY2guZXhhbXBsZT4NClRvOiBhbGV4QGZyYWxleC5hcnQNClN1YmplY3Q6IEludml0YXRpb246IFNpdGUgd2Fsay10aHJvdWdoDQpEYXRlOiBTdW4sIDEzIFNlcCAyMDI2IDE0OjMyOjEzICswMDAwDQpNZXNzYWdlLUlEOiA8MTRAZXhhbXBsZS50ZXN0Pg0KTUlNRS1WZXJzaW9uOiAxLjANCkNvbnRlbnQtVHlwZTogbXVsdGlwYXJ0L2FsdGVybmF0aXZlOyBib3VuZGFyeT0iYjMiDQoNCi0tYjMNCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsgY2hhcnNldD11dGYtOA0KDQpTaXRlIHdhbGstdGhyb3VnaCwgVGh1cnNkYXkgMTU6MDAuDQoNCi0tYjMNCkNvbnRlbnQtVHlwZTogdGV4dC9jYWxlbmRhcjsgbWV0aG9kPVJFUVVFU1Q7IGNoYXJzZXQ9dXRmLTgNCg0KQkVHSU46VkNBTEVOREFSDQpWRVJTSU9OOjIuMA0KUFJPRElEOi0vL3Rlc3QvL0VODQpNRVRIT0Q6UkVRVUVTVA0KQkVHSU46VkVWRU5UDQpVSUQ6d2Fsay0xQGZlcnJlaXJhLWFyY2guZXhhbXBsZQ0KRFRTVEFNUDoyMDI2MDkxNlQxNTAwMDBaDQpEVFNUQVJUOjIwMjYwOTE2VDE1MDAwMFoNCkRURU5EOjIwMjYwOTE2VDE2MDAwMFoNClNVTU1BUlk6U2l0ZSB3YWxrLXRocm91Z2gNCkxPQ0FUSU9OOjE0IFF1YXkgU3RyZWV0DQpPUkdBTklaRVI6bWFpbHRvOm5hZGlhQGZlcnJlaXJhLWFyY2guZXhhbXBsZQ0KQVRURU5ERUU7UEFSVFNUQVQ9TkVFRFMtQUNUSU9OOm1haWx0bzphbGV4QGZyYWxleC5hcnQNCkVORDpWRVZFTlQNCkVORDpWQ0FMRU5EQVINCg0KLS1iMy0tDQo=",
+   "parts": {
+    "v": 1,
+    "text": "Site walk-through, Thursday 15:00.\n\n",
+    "html": null,
+    "attachments": [
+     {
+      "name": "",
+      "mime": "text/calendar",
+      "size": 355,
+      "cid": "",
+      "inline": false,
+      "method": "REQUEST",
+      "data": "QkVHSU46VkNBTEVOREFSClZFUlNJT046Mi4wClBST0RJRDotLy90ZXN0Ly9FTgpNRVRIT0Q6UkVRVUVTVApCRUdJTjpWRVZFTlQKVUlEOndhbGstMUBmZXJyZWlyYS1hcmNoLmV4YW1wbGUKRFRTVEFNUDoyMDI2MDkxNlQxNTAwMDBaCkRUU1RBUlQ6MjAyNjA5MTZUMTUwMDAwWgpEVEVORDoyMDI2MDkxNlQxNjAwMDBaClNVTU1BUlk6U2l0ZSB3YWxrLXRocm91Z2gKTE9DQVRJT046MTQgUXVheSBTdHJlZXQKT1JHQU5JWkVSOm1haWx0bzpuYWRpYUBmZXJyZWlyYS1hcmNoLmV4YW1wbGUKQVRURU5ERUU7UEFSVFNUQVQ9TkVFRFMtQUNUSU9OOm1haWx0bzphbGV4QGZyYWxleC5hcnQKRU5EOlZFVkVOVApFTkQ6VkNBTEVOREFSCg=="
+     }
+    ]
+   }
+  },
+  {
+   "name": "eml/14b.eml",
+   "raw": "RnJvbTogTmFkaWEgRmVycmVpcmEgPG5hZGlhQGZlcnJlaXJhLWFyY2guZXhhbXBsZT4NClRvOiBhbGV4QGZyYWxleC5hcnQNClN1YmplY3Q6IEludml0YXRpb246IFNpdGUgd2Fsay10aHJvdWdoIChyZXZpc2VkKQ0KRGF0ZTogU3VuLCAxMyBTZXAgMjAyNiAxNDozMjoxMyArMDAwMA0KTWVzc2FnZS1JRDogPDE0YkBleGFtcGxlLnRlc3Q+DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvYWx0ZXJuYXRpdmU7IGJvdW5kYXJ5PSJiMyINCg0KLS1iMw0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXV0Zi04DQoNClNpdGUgd2Fsay10aHJvdWdoLCBUaHVyc2RheSAxNTowMC4NCg0KLS1iMw0KQ29udGVudC1UeXBlOiB0ZXh0L2NhbGVuZGFyOyBtZXRob2Q9UkVRVUVTVDsgY2hhcnNldD11dGYtOA0KDQpCRUdJTjpWQ0FMRU5EQVINClZFUlNJT046Mi4wDQpQUk9ESUQ6LS8vdGVzdC8vRU4NCk1FVEhPRDpSRVFVRVNUDQpCRUdJTjpWRVZFTlQNClVJRDp3YWxrLTJAZmVycmVpcmEtYXJjaC5leGFtcGxlDQpEVFNUQU1QOjIwMjYwOTE2VDE1MDAwMFoNCkRUU1RBUlQ6MjAyNjA5MTZUMTUwMDAwWg0KRFRFTkQ6MjAyNjA5MTZUMTYwMDAwWg0KU1VNTUFSWTpTaXRlIHdhbGstdGhyb3VnaA0KTE9DQVRJT046MTQgUXVheSBTdHJlZXQNCk9SR0FOSVpFUjptYWlsdG86bmFkaWFAZmVycmVpcmEtYXJjaC5leGFtcGxlDQpBVFRFTkRFRTtQQVJUU1RBVD1ORUVEUy1BQ1RJT046bWFpbHRvOmFsZXhAZnJhbGV4LmFydA0KRU5EOlZFVkVOVA0KRU5EOlZDQUxFTkRBUg0KDQotLWIzLS0NCg==",
+   "parts": {
+    "v": 1,
+    "text": "Site walk-through, Thursday 15:00.\n\n",
+    "html": null,
+    "attachments": [
+     {
+      "name": "",
+      "mime": "text/calendar",
+      "size": 355,
+      "cid": "",
+      "inline": false,
+      "method": "REQUEST",
+      "data": "QkVHSU46VkNBTEVOREFSClZFUlNJT046Mi4wClBST0RJRDotLy90ZXN0Ly9FTgpNRVRIT0Q6UkVRVUVTVApCRUdJTjpWRVZFTlQKVUlEOndhbGstMkBmZXJyZWlyYS1hcmNoLmV4YW1wbGUKRFRTVEFNUDoyMDI2MDkxNlQxNTAwMDBaCkRUU1RBUlQ6MjAyNjA5MTZUMTUwMDAwWgpEVEVORDoyMDI2MDkxNlQxNjAwMDBaClNVTU1BUlk6U2l0ZSB3YWxrLXRocm91Z2gKTE9DQVRJT046MTQgUXVheSBTdHJlZXQKT1JHQU5JWkVSOm1haWx0bzpuYWRpYUBmZXJyZWlyYS1hcmNoLmV4YW1wbGUKQVRURU5ERUU7UEFSVFNUQVQ9TkVFRFMtQUNUSU9OOm1haWx0bzphbGV4QGZyYWxleC5hcnQKRU5EOlZFVkVOVApFTkQ6VkNBTEVOREFSCg=="
+     }
+    ]
+   }
+  },
+  {
+   "name": "related-inline-image",
+   "raw": "RnJvbTogTmFkaWEgPG5hZGlhQGV4YW1wbGUuY29tPg0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogRmxvb3IgcGxhbg0KTWVzc2FnZS1JRDogPHJlbC0xQGV4YW1wbGUuY29tPg0KTUlNRS1WZXJzaW9uOiAxLjANCkNvbnRlbnQtVHlwZTogbXVsdGlwYXJ0L3JlbGF0ZWQ7IGJvdW5kYXJ5PSJSMSINCg0KLS1SMQ0KQ29udGVudC1UeXBlOiB0ZXh0L2h0bWw7IGNoYXJzZXQ9dXRmLTgNCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IHF1b3RlZC1wcmludGFibGUNCg0KPHA+U2VlIHRoZSBwbGFuOjwvcD48aW1nIHNyYz0zRCJjaWQ6cGxhbkBleGFtcGxlLmNvbSI+PHA+Q2FmPUMzPUE5IGF0IDMuPC9wPg0KDQotLVIxDQpDb250ZW50LVR5cGU6IGltYWdlL3BuZzsgbmFtZT1wbGFuLnBuZw0KQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogYmFzZTY0DQpDb250ZW50LUlEOiA8cGxhbkBleGFtcGxlLmNvbT4NCkNvbnRlbnQtRGlzcG9zaXRpb246IGlubGluZTsgZmlsZW5hbWU9cGxhbi5wbmcNCg0KaVZCT1J3MEtHZ29BQUFBTlNVaEVVZ0FBQUFFQUFBQUJDQVlBQUFBZkZjU0pBQUFBRFVsRVFWUjQybU5rWVBoZkR3QUNod0dBNjBlNg0Ka2dBQUFBQkpSVTVFcmtKZ2dnPT0NCi0tUjEtLQ0K",
+   "parts": {
+    "v": 1,
+    "text": "",
+    "html": "<p>See the plan:</p><img src=\"cid:plan@example.com\"><p>Café at 3.</p>\n\n",
+    "attachments": [
+     {
+      "name": "plan.png",
+      "mime": "image/png",
+      "size": 70,
+      "cid": "<plan@example.com>",
+      "inline": true,
+      "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+     }
+    ]
+   }
+  },
+  {
+   "name": "latin1-quoted-printable",
+   "raw": "RnJvbTogPT9JU08tODg1OS0xP1E/Sm9zPUU5Pz0gPGpvc2VAZXhhbXBsZS5jb20+DQpUbzogYWxleEB3dWxpLm51DQpTdWJqZWN0OiA9P2lzby04ODU5LTE/cT9GYT1FN2FkZT89DQpNZXNzYWdlLUlEOiA8bDFAZXhhbXBsZS5jb20+DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PUlTTy04ODU5LTENCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IHF1b3RlZC1wcmludGFibGUNCg0KTGEgZmE9RTdhZGUgZXN0IHByPUVBdGUsID1FMCBiaWVudD1GNHQuPQ0KU29mdCBicmVhayBqb2luZWQuDQo=",
+   "parts": {
+    "v": 1,
+    "text": "La façade est prête, à bientôt.Soft break joined.\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "windows-1252-and-encoded-filenames",
+   "raw": "RnJvbTogYUBleGFtcGxlLmNvbQ0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogZmlsZXMNCk1lc3NhZ2UtSUQ6IDx3MUBleGFtcGxlLmNvbT4NCk1JTUUtVmVyc2lvbjogMS4wDQpDb250ZW50LVR5cGU6IG11bHRpcGFydC9taXhlZDsgYm91bmRhcnk9Ik0xIg0KDQotLU0xDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW47IGNoYXJzZXQ9d2luZG93cy0xMjUyDQpDb250ZW50LVRyYW5zZmVyLUVuY29kaW5nOiBxdW90ZWQtcHJpbnRhYmxlDQoNCj05M1F1b3RlZD05NCA9OTYgZGFzaCA9ODUNCg0KLS1NMQ0KQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9wZGY7IG5hbWU9Ij0/VVRGLTg/Qj9VbVhNZ1hOMWJjT3BMbkJrWmc9PT89Ig0KQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogYmFzZTY0DQpDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZSo9VVRGLTgnJ1IlQzMlQTlzdW0lQzMlQTklMjBmaW5hbC5wZGYNCg0KSlZCRVJpMHhMalFnWm1GclpRbz0NCg0KLS1NMQ0KQ29udGVudC1UeXBlOiB0ZXh0L2Nzdg0KQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogYmFzZTY0DQpDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50Ow0KIGZpbGVuYW1lKjA9ImxvbmctbmFtZS0iOw0KIGZpbGVuYW1lKjE9InBhcnQtdHdvLmNzdiINCg0KWVN4aUNqRXNNZ289DQotLU0xLS0NCg==",
+   "parts": {
+    "v": 1,
+    "text": "“Quoted” – dash …\n\n",
+    "html": null,
+    "attachments": [
+     {
+      "name": "Résumé final.pdf",
+      "mime": "application/pdf",
+      "size": 14,
+      "cid": "",
+      "inline": false,
+      "data": "JVBERi0xLjQgZmFrZQo="
+     },
+     {
+      "name": "long-name-part-two.csv",
+      "mime": "text/csv",
+      "size": 8,
+      "cid": "",
+      "inline": false,
+      "data": "YSxiCjEsMgo="
+     }
+    ]
+   }
+  },
+  {
+   "name": "nested-alternative-with-attachment",
+   "raw": "RnJvbTogYkBleGFtcGxlLmNvbQ0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogbmVzdGVkDQpNZXNzYWdlLUlEOiA8bjFAZXhhbXBsZS5jb20+DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSJPVVQiDQoNClRoaXMgaXMgYSBtdWx0aS1wYXJ0IG1lc3NhZ2UgaW4gTUlNRSBmb3JtYXQuDQotLU9VVA0KQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvYWx0ZXJuYXRpdmU7IGJvdW5kYXJ5PSJBTFQiDQoNCi0tQUxUDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW47IGNoYXJzZXQ9dXRmLTgNCg0KUGxhaW4gdmVyc2lvbi4NCg0KLS1BTFQNCkNvbnRlbnQtVHlwZTogdGV4dC9odG1sOyBjaGFyc2V0PXV0Zi04DQoNCjxwPkhUTUwgPGI+dmVyc2lvbjwvYj4uPC9wPg0KDQotLUFMVC0tDQoNCi0tT1VUDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL29jdGV0LXN0cmVhbQ0KQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogYmFzZTY0DQpDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZT0iZGF0YS5iaW4iDQoNCkFBRUMrdnY4L2Y3Lw0KLS1PVVQtLQ0K",
+   "parts": {
+    "v": 1,
+    "text": "Plain version.\n\n",
+    "html": "<p>HTML <b>version</b>.</p>\n\n",
+    "attachments": [
+     {
+      "name": "data.bin",
+      "mime": "application/octet-stream",
+      "size": 9,
+      "cid": "",
+      "inline": false,
+      "data": "AAEC+vv8/f7/"
+     }
+    ]
+   }
+  },
+  {
+   "name": "calendar-request",
+   "raw": "RnJvbTogY0BleGFtcGxlLmNvbQ0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogSW52aXRhdGlvbg0KTWVzc2FnZS1JRDogPGMxQGV4YW1wbGUuY29tPg0KTUlNRS1WZXJzaW9uOiAxLjANCkNvbnRlbnQtVHlwZTogbXVsdGlwYXJ0L2FsdGVybmF0aXZlOyBib3VuZGFyeT0iQzEiDQoNCi0tQzENCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsgY2hhcnNldD11dGYtOA0KDQpZb3UgYXJlIGludml0ZWQuDQoNCi0tQzENCkNvbnRlbnQtVHlwZTogdGV4dC9jYWxlbmRhcjsgY2hhcnNldD11dGYtODsgbWV0aG9kPVJFUVVFU1QNCg0KQkVHSU46VkNBTEVOREFSDQpNRVRIT0Q6UkVRVUVTVA0KQkVHSU46VkVWRU5UDQpVSUQ6dTFAZXhhbXBsZS5jb20NCkRUU1RBUlQ6MjAyNjEwMDFUMTUwMDAwWg0KU1VNTUFSWTpXYWxrDQpFTkQ6VkVWRU5UDQpFTkQ6VkNBTEVOREFSDQoNCi0tQzEtLQ0K",
+   "parts": {
+    "v": 1,
+    "text": "You are invited.\n\n",
+    "html": null,
+    "attachments": [
+     {
+      "name": "",
+      "mime": "text/calendar",
+      "size": 126,
+      "cid": "",
+      "inline": false,
+      "method": "REQUEST",
+      "data": "QkVHSU46VkNBTEVOREFSCk1FVEhPRDpSRVFVRVNUCkJFR0lOOlZFVkVOVApVSUQ6dTFAZXhhbXBsZS5jb20KRFRTVEFSVDoyMDI2MTAwMVQxNTAwMDBaClNVTU1BUlk6V2FsawpFTkQ6VkVWRU5UCkVORDpWQ0FMRU5EQVIK"
+     }
+    ]
+   }
+  },
+  {
+   "name": "forwarded-message",
+   "raw": "RnJvbTogZEBleGFtcGxlLmNvbQ0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogRndkOiBvbGQNCk1lc3NhZ2UtSUQ6IDxmMUBleGFtcGxlLmNvbT4NCk1JTUUtVmVyc2lvbjogMS4wDQpDb250ZW50LVR5cGU6IG11bHRpcGFydC9taXhlZDsgYm91bmRhcnk9IkYxIg0KDQotLUYxDQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW47IGNoYXJzZXQ9dXRmLTgNCg0KU2VlIGJlbG93Lg0KDQotLUYxDQpDb250ZW50LVR5cGU6IG1lc3NhZ2UvcmZjODIyDQpDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZT0ib2xkLmVtbCINCg0KRnJvbTogZUBleGFtcGxlLmNvbQ0KVG86IGRAZXhhbXBsZS5jb20NClN1YmplY3Q6IG9sZA0KDQpUaGUgb3JpZ2luYWwuDQoNCi0tRjEtLQ0K",
+   "parts": {
+    "v": 1,
+    "text": "See below.\n\n",
+    "html": null,
+    "attachments": [
+     {
+      "name": "old.eml",
+      "mime": "message/rfc822",
+      "size": 67,
+      "cid": "",
+      "inline": false,
+      "data": "RnJvbTogZUBleGFtcGxlLmNvbQpUbzogZEBleGFtcGxlLmNvbQpTdWJqZWN0OiBvbGQKClRoZSBvcmlnaW5hbC4KCg=="
+     }
+    ]
+   }
+  },
+  {
+   "name": "html-only",
+   "raw": "RnJvbTogZUBleGFtcGxlLmNvbQ0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogaHRtbCBvbmx5DQpNZXNzYWdlLUlEOiA8aDFAZXhhbXBsZS5jb20+DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L2h0bWw7IGNoYXJzZXQ9dXRmLTgNCg0KPGh0bWw+PGJvZHk+PGgxPlRpdGxlPC9oMT48cD5MaW5lIG9uZTxicj5MaW5lIHR3byAmYW1wOyBtb3JlPC9wPjwvYm9keT48L2h0bWw+DQo=",
+   "parts": {
+    "v": 1,
+    "text": "",
+    "html": "<html><body><h1>Title</h1><p>Line one<br>Line two &amp; more</p></body></html>\n",
+    "attachments": []
+   }
+  },
+  {
+   "name": "base64-text-single-part",
+   "raw": "RnJvbTogZkBleGFtcGxlLmNvbQ0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogYjY0DQpNZXNzYWdlLUlEOiA8YjFAZXhhbXBsZS5jb20+DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXV0Zi04DQpDb250ZW50LVRyYW5zZmVyLUVuY29kaW5nOiBiYXNlNjQNCg0KUjNMRHZNT2ZaU0JoZFhNZ1M4TzJiRzRnNG9DVUlNTzhic092WTI5a1pTNEtVMlZqYjI1a0lHeHBibVV1DQo=",
+   "parts": {
+    "v": 1,
+    "text": "Grüße aus Köln — ünïcode.\nSecond line.",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "no-content-type-8bit",
+   "raw": "RnJvbTogZ0BleGFtcGxlLmNvbQ0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogYmFyZQ0KTWVzc2FnZS1JRDogPGUxQGV4YW1wbGUuY29tPg0KDQpKdXN0IHRleHQsIG5vIE1JTUUgaGVhZGVycyBhdCBhbGwuIMOHYSB2YS4NCg==",
+   "parts": {
+    "v": 1,
+    "text": "Just text, no MIME headers at all. Ça va.\n",
+    "html": null,
+    "attachments": []
+   }
+  },
+  {
+   "name": "attachment-without-name",
+   "raw": "RnJvbTogaEBleGFtcGxlLmNvbQ0KVG86IGFsZXhAd3VsaS5udQ0KU3ViamVjdDogdW5uYW1lZA0KTWVzc2FnZS1JRDogPHUyQGV4YW1wbGUuY29tPg0KTUlNRS1WZXJzaW9uOiAxLjANCkNvbnRlbnQtVHlwZTogbXVsdGlwYXJ0L21peGVkOyBib3VuZGFyeT0iVTEiDQoNCi0tVTENCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpCb2R5Lg0KDQotLVUxDQpDb250ZW50LVR5cGU6IGltYWdlL2pwZWcNCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IGJhc2U2NA0KDQovOWovNEFBUQ0KLS1VMS0tDQo=",
+   "parts": {
+    "v": 1,
+    "text": "Body.\n\n",
+    "html": null,
+    "attachments": [
+     {
+      "name": "",
+      "mime": "image/jpeg",
+      "size": 6,
+      "cid": "",
+      "inline": false,
+      "data": "/9j/4AAQ"
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,31 @@
+# LeanMail for iPhone, iPad and Mac Catalyst: a LeanNative app (Lean compiled to C, no Swift).
+# It imports only `Core.*` from the server package; LeanNative compiles just the root's import closure.
+name = "leanmailapp"
+defaultTargets = ["LeanMailApp", "Gate"]
+
+[[require]]
+name = "elmlean"
+git = "https://github.com/LeanNative/leannative.git"
+rev = "1d887a119c9b06ad84740195537f070a270efa98"
+subDir = "framework/lean"
+
+[[require]]
+name = "leanmail"
+path = "../lean"
+
+[[lean_lib]]
+name = "LeanMailApp"
+
+# The proof gate: `#assert_axioms` on the app's invariants (not part of the app's import closure).
+[[lean_lib]]
+name = "Gate"
+
+# The Xcode project's spec, from LeanMailApp/Project.lean (framework/native/ci/build-ios runs it).
+[[lean_exe]]
+name = "ios-project"
+root = "LeanMailApp.Project"
+
+# The app on stdin/stdout (`selftest` explores it from its initial model; PROTOCOL.md).
+[[lean_exe]]
+name = "leanmail-app-cli"
+root = "Cli"

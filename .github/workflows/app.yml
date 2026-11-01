@@ -1,0 +1,31 @@
+name: app
+
+# The native app (app/, LeanNative): Lean build and proof gate, the app's selftest, iOS simulator builds,
+# and the UI tests against a bare leanmail-server holding the fixture mail (app/ios/ui-before).
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', 'lean/Core/**', 'lean/Core.lean', 'lean/lakefile.lean', 'lean/lean-toolchain', '.github/workflows/app.yml']
+  pull_request:
+    paths: ['app/**', 'lean/Core/**', 'lean/Core.lean', 'lean/lakefile.lean', 'lean/lean-toolchain', '.github/workflows/app.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    uses: LeanNative/leannative/.github/workflows/ios-app.yml@1d887a119c9b06ad84740195537f070a270efa98
+    with:
+      elmlean: 1d887a119c9b06ad84740195537f070a270efa98
+      runs-on: xcode-27
+      lean-packages: lean app
+      build-targets: |
+        app leanmail-app-cli
+      app-dir: app
+      app-root: LeanMailApp
+      scheme: LeanMailApp
+      tests: |
+        app .lake/build/bin/leanmail-app-cli selftest
+      ui-before: ${{ github.workspace }}/app/ios/ui-before
+      ui-after: ${{ github.workspace }}/app/ios/ui-after

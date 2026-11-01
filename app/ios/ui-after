@@ -1,0 +1,7 @@
+#!/bin/bash
+# LeanMail's UI_AFTER: stops the server ui-before started and keeps its log with the evidence.
+OUT="${1:?the ui-tests evidence directory}"
+pid="$(cat "$OUT/fixture/server.pid" 2>/dev/null || true)"
+[ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true
+rm -rf "$OUT/fixture/data"
+exit 0

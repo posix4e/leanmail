@@ -1,0 +1,13 @@
+.lake/
+node_modules/
+.wrangler/
+.DS_Store
+/data/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+/server/.secrets/
+lean/test/out/
+/server/.cache/

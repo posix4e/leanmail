@@ -1,0 +1,33 @@
+From: Nadia Ferreira <nadia@ferreira-arch.example>
+To: alex@fralex.art
+Subject: Invitation: Site walk-through (revised)
+Date: Sun, 13 Sep 2026 14:32:13 +0000
+Message-ID: <14b@example.test>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b3"
+
+--b3
+Content-Type: text/plain; charset=utf-8
+
+Site walk-through, Thursday 15:00.
+
+--b3
+Content-Type: text/calendar; method=REQUEST; charset=utf-8
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:walk-2@ferreira-arch.example
+DTSTAMP:20260916T150000Z
+DTSTART:20260916T150000Z
+DTEND:20260916T160000Z
+SUMMARY:Site walk-through
+LOCATION:14 Quay Street
+ORGANIZER:mailto:nadia@ferreira-arch.example
+ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:alex@fralex.art
+END:VEVENT
+END:VCALENDAR
+
+--b3--

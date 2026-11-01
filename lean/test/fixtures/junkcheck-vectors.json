@@ -1,0 +1,2580 @@
+{
+ "generator": "scripts/junkcheck-vectors.ts",
+ "v": 2,
+ "report_to": "reportphishing@apwg.org",
+ "verdict_text": {
+  "clean": "Nothing looks wrong",
+  "suspicious": "Some things look off",
+  "spam": "Looks like spam",
+  "phishing": "Looks like phishing"
+ },
+ "reason_text": {
+  "dmarc_fail": "The sender's domain ({domain}) says it did not send this (DMARC failed).",
+  "spf_fail": "It came from a server {domain} does not send from (SPF failed).",
+  "dkim_fail": "Its signature does not check out (DKIM failed).",
+  "own_domain_unverified": "It says it is from your own domain ({domain}), but nothing proves it.",
+  "name_has_other_address": "The sender's name shows {shown}, but it came from {actual}.",
+  "brand_mismatch": "The sender's name says {brand}, but it came from {domain}.",
+  "brand_in_subject": "It says it is from {brand} and asks you to act, but it came from {domain}.",
+  "lookalike_domain": "{domain} looks like {like}, but is not it.",
+  "punycode_sender": "The sender's domain ({domain}) is written in look-alike characters.",
+  "reply_to_elsewhere": "Replies go to {reply}, not to {domain}.",
+  "link_text_mismatch": "A link shows {shown} but goes to {actual}.",
+  "link_userinfo": "A link hides where it goes behind {shown} (it goes to {actual}).",
+  "link_to_ip": "A link goes to a bare address ({actual}), not a named site.",
+  "link_punycode": "A link goes to {actual}, written in look-alike characters.",
+  "risky_attachment": "{name} runs a program when opened.",
+  "page_attachment": "{name} opens a web page, which is how fake sign-in pages travel.",
+  "credential_lure": "It asks you to act on your account (\"{phrase}\") and has a link.",
+  "gmail_spam": "Gmail had it in Spam.",
+  "upstream_spam": "A mail server on the way marked it as spam.",
+  "spam_phrases": "It reads like spam (\"{phrase}\"{more}).",
+  "bulk_no_unsubscribe": "It is bulk mail with no way to unsubscribe.",
+  "shouting_subject": "The subject shouts."
+ },
+ "sites": [
+  {
+   "host": "mail.example.co.uk",
+   "site": "example.co.uk"
+  },
+  {
+   "host": "a.b.example.com",
+   "site": "example.com"
+  },
+  {
+   "host": "example.com",
+   "site": "example.com"
+  },
+  {
+   "host": "192.0.2.1",
+   "site": "192.0.2.1"
+  },
+  {
+   "host": "x.y.z.gov.uk",
+   "site": "z.gov.uk"
+  },
+  {
+   "host": "www.paypal.com.",
+   "site": "paypal.com"
+  },
+  {
+   "host": "localhost",
+   "site": "localhost"
+  }
+ ],
+ "cases": [
+  {
+   "name": "clean",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-newsletter-tracked-links",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": "<p>Read <a href=\"https://shop.us1.list-manage.com/track/click?u=1\">shop.example/blog</a></p>",
+    "attachments": [],
+    "list_id": "<news.shop.example>",
+    "list_unsubscribe": "<https://shop.example/u>",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-own-redirector",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": "<a href=\"https://click.shop.example/r/1\">www.shop.example</a>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-file-named-link",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": "<a href=\"https://files.other.example/abc\">report.pdf</a>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-brand-from-brand",
+   "input": {
+    "headers": [
+     {
+      "key": "authentication-results",
+      "value": "mx.cloudflare.net; dkim=pass; spf=pass; dmarc=pass"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "PayPal",
+     "address": "service@paypal.com"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-brand-subdomain",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Microsoft account team",
+     "address": "account-security-noreply@accountprotection.microsoft.com"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-group-rewrite",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "'ann@corp.example' via Hikers",
+     "address": "hikers@googlegroups.com"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "<hikers.googlegroups.com>",
+    "list_unsubscribe": "<mailto:x>",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-mail-com-is-not-gmail",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Pat",
+     "address": "pat@mail.com"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-person-named-chase",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Chase Miller",
+     "address": "chase@miller.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-own-domain-passing",
+   "input": {
+    "headers": [
+     {
+      "key": "authentication-results",
+      "value": "mx.cloudflare.net; dkim=pass header.d=wuli.nu; spf=pass; dmarc=pass"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Me",
+     "address": "alex@wuli.nu"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-no-auth-header-own-domain",
+   "input": {
+    "headers": [],
+    "auth": null,
+    "from": {
+     "name": "Me",
+     "address": "alex@wuli.nu"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "clean-envelope-auth-empty",
+   "input": {
+    "headers": null,
+    "auth": {
+     "spf": "",
+     "dkim": "",
+     "dmarc": ""
+    },
+    "from": {
+     "name": "Me",
+     "address": "alex@wuli.nu"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "dmarc-fail",
+   "input": {
+    "headers": [
+     {
+      "key": "authentication-results",
+      "value": "mx.cloudflare.net; dkim=none; spf=fail smtp.mailfrom=bank.example; dmarc=fail header.from=bank.example"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Bank",
+     "address": "alerts@bank.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "dmarc_fail",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "domain": "bank.example"
+      }
+     },
+     {
+      "code": "spf_fail",
+      "family": "phish",
+      "weight": 1,
+      "detail": {
+       "domain": "bank.example"
+      }
+     }
+    ]
+   },
+   "words": [
+    "The sender's domain (bank.example) says it did not send this (DMARC failed).",
+    "It came from a server bank.example does not send from (SPF failed)."
+   ]
+  },
+  {
+   "name": "forged-pass-below-receiver",
+   "input": {
+    "headers": [
+     {
+      "key": "authentication-results",
+      "value": "mx.cloudflare.net; dmarc=fail header.from=bank.example; spf=softfail"
+     },
+     {
+      "key": "authentication-results",
+      "value": "mx.cloudflare.net; dmarc=pass; spf=pass; dkim=pass"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Bank",
+     "address": "alerts@bank.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 3,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "dmarc_fail",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "domain": "bank.example"
+      }
+     }
+    ]
+   },
+   "words": [
+    "The sender's domain (bank.example) says it did not send this (DMARC failed)."
+   ]
+  },
+  {
+   "name": "envelope-auth-fallback",
+   "input": {
+    "headers": null,
+    "auth": {
+     "spf": "fail",
+     "dkim": "fail",
+     "dmarc": "fail"
+    },
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 5,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "dmarc_fail",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "domain": "shop.example"
+      }
+     },
+     {
+      "code": "spf_fail",
+      "family": "phish",
+      "weight": 1,
+      "detail": {
+       "domain": "shop.example"
+      }
+     },
+     {
+      "code": "dkim_fail",
+      "family": "phish",
+      "weight": 1,
+      "detail": {}
+     }
+    ]
+   },
+   "words": [
+    "The sender's domain (shop.example) says it did not send this (DMARC failed).",
+    "It came from a server shop.example does not send from (SPF failed).",
+    "Its signature does not check out (DKIM failed)."
+   ]
+  },
+  {
+   "name": "own-domain-spoofed",
+   "input": {
+    "headers": [
+     {
+      "key": "authentication-results",
+      "value": "mx.cloudflare.net; dkim=none; spf=softfail; dmarc=none"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Alex",
+     "address": "alex@wuli.nu"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "own_domain_unverified",
+      "family": "phish",
+      "weight": 4,
+      "detail": {
+       "domain": "wuli.nu"
+      }
+     }
+    ]
+   },
+   "words": [
+    "It says it is from your own domain (wuli.nu), but nothing proves it."
+   ]
+  },
+  {
+   "name": "own-subdomain-spoofed",
+   "input": {
+    "headers": [
+     {
+      "key": "authentication-results",
+      "value": "mx.cloudflare.net; dkim=none; spf=none; dmarc=none"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "IT desk",
+     "address": "it@mail.example.org"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "own_domain_unverified",
+      "family": "phish",
+      "weight": 4,
+      "detail": {
+       "domain": "mail.example.org"
+      }
+     }
+    ]
+   },
+   "words": [
+    "It says it is from your own domain (mail.example.org), but nothing proves it."
+   ]
+  },
+  {
+   "name": "name-shows-other-address",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "support@paypal.com",
+     "address": "x7@mailer.evil.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 5,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "name_has_other_address",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "shown": "support@paypal.com",
+       "actual": "x7@mailer.evil.example"
+      }
+     },
+     {
+      "code": "brand_mismatch",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "brand": "support@paypal.com",
+       "domain": "mailer.evil.example"
+      }
+     }
+    ]
+   },
+   "words": [
+    "The sender's name shows support@paypal.com, but it came from x7@mailer.evil.example.",
+    "The sender's name says support@paypal.com, but it came from mailer.evil.example."
+   ]
+  },
+  {
+   "name": "brand-in-name",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "PayPal Security",
+     "address": "security@pp-alerts.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 2,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "brand_mismatch",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "brand": "PayPal Security",
+       "domain": "pp-alerts.example"
+      }
+     }
+    ]
+   },
+   "words": [
+    "The sender's name says PayPal Security, but it came from pp-alerts.example."
+   ]
+  },
+  {
+   "name": "brand-lookalike-digit",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Service",
+     "address": "service@paypa1.com"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "lookalike_domain",
+      "family": "phish",
+      "weight": 4,
+      "detail": {
+       "domain": "paypa1.com",
+       "like": "paypal.com"
+      }
+     }
+    ]
+   },
+   "words": [
+    "paypa1.com looks like paypal.com, but is not it."
+   ]
+  },
+  {
+   "name": "brand-lookalike-rn",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Account team",
+     "address": "no-reply@rnicrosoft.com"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "lookalike_domain",
+      "family": "phish",
+      "weight": 4,
+      "detail": {
+       "domain": "rnicrosoft.com",
+       "like": "microsoft.com"
+      }
+     }
+    ]
+   },
+   "words": [
+    "rnicrosoft.com looks like microsoft.com, but is not it."
+   ]
+  },
+  {
+   "name": "brand-lookalike-extra-letter",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Orders",
+     "address": "orders@amazoon.com"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 3,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "lookalike_domain",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "domain": "amazoon.com",
+       "like": "amazon.com"
+      }
+     }
+    ]
+   },
+   "words": [
+    "amazoon.com looks like amazon.com, but is not it."
+   ]
+  },
+  {
+   "name": "own-lookalike",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Alex",
+     "address": "alex@wu1i.nu"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "lookalike_domain",
+      "family": "phish",
+      "weight": 4,
+      "detail": {
+       "domain": "wu1i.nu",
+       "like": "wuli.nu"
+      }
+     }
+    ]
+   },
+   "words": [
+    "wu1i.nu looks like wuli.nu, but is not it."
+   ]
+  },
+  {
+   "name": "punycode-sender",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Apple",
+     "address": "id@xn--pple-43d.com"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 5,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "brand_mismatch",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "brand": "Apple",
+       "domain": "xn--pple-43d.com"
+      }
+     },
+     {
+      "code": "punycode_sender",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "domain": "xn--pple-43d.com"
+      }
+     }
+    ]
+   },
+   "words": [
+    "The sender's name says Apple, but it came from xn--pple-43d.com.",
+    "The sender's domain (xn--pple-43d.com) is written in look-alike characters."
+   ]
+  },
+  {
+   "name": "reply-to-elsewhere",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [
+     {
+      "name": "",
+      "address": "claims@other.example"
+     }
+    ],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 1,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "reply_to_elsewhere",
+      "family": "phish",
+      "weight": 1,
+      "detail": {
+       "reply": "claims@other.example",
+       "domain": "shop.example"
+      }
+     }
+    ]
+   },
+   "words": [
+    "Replies go to claims@other.example, not to shop.example."
+   ]
+  },
+  {
+   "name": "reply-to-same-site",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [
+     {
+      "name": "",
+      "address": "help@support.shop.example"
+     }
+    ],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "link-text-mismatch",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": "<p>Sign in at <a href=\"https://login.evil.example/p\">https://www.paypal.com/signin</a></p>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 3,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "link_text_mismatch",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "shown": "www.paypal.com",
+       "actual": "login.evil.example"
+      }
+     }
+    ]
+   },
+   "words": [
+    "A link shows www.paypal.com but goes to login.evil.example."
+   ]
+  },
+  {
+   "name": "link-entities-and-quotes",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": "<a class=b href='https://evil.example/?a=1&amp;b=2'>paypal.com</a>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 3,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "link_text_mismatch",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "shown": "paypal.com",
+       "actual": "evil.example"
+      }
+     }
+    ]
+   },
+   "words": [
+    "A link shows paypal.com but goes to evil.example."
+   ]
+  },
+  {
+   "name": "link-userinfo",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Open https://paypal.com@203.0.113.9/login now",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 5,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "link_userinfo",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "shown": "paypal.com",
+       "actual": "203.0.113.9"
+      }
+     },
+     {
+      "code": "link_to_ip",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "actual": "203.0.113.9"
+      }
+     }
+    ]
+   },
+   "words": [
+    "A link hides where it goes behind paypal.com (it goes to 203.0.113.9).",
+    "A link goes to a bare address (203.0.113.9), not a named site."
+   ]
+  },
+  {
+   "name": "link-ip",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": "<a href=\"http://198.51.100.7/x\">Click here</a>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 2,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "link_to_ip",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "actual": "198.51.100.7"
+      }
+     }
+    ]
+   },
+   "words": [
+    "A link goes to a bare address (198.51.100.7), not a named site."
+   ]
+  },
+  {
+   "name": "link-punycode",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": "<a href=\"https://xn--80ak6aa92e.com/\">Open</a>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 2,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "link_punycode",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "actual": "xn--80ak6aa92e.com"
+      }
+     }
+    ]
+   },
+   "words": [
+    "A link goes to xn--80ak6aa92e.com, written in look-alike characters."
+   ]
+  },
+  {
+   "name": "risky-attachment",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [
+     {
+      "name": "Invoice.pdf.exe",
+      "mime": "application/octet-stream"
+     }
+    ],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 3,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "risky_attachment",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "name": "Invoice.pdf.exe"
+      }
+     }
+    ]
+   },
+   "words": [
+    "Invoice.pdf.exe runs a program when opened."
+   ]
+  },
+  {
+   "name": "page-attachment-and-lure",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your mailbox is full",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [
+     {
+      "name": "Restore.htm",
+      "mime": "text/html"
+     }
+    ],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "page_attachment",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "name": "Restore.htm"
+      }
+     },
+     {
+      "code": "credential_lure",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "phrase": "your mailbox is full"
+      }
+     }
+    ]
+   },
+   "words": [
+    "Restore.htm opens a web page, which is how fake sign-in pages travel.",
+    "It asks you to act on your account (\"your mailbox is full\") and has a link."
+   ]
+  },
+  {
+   "name": "credential-lure-with-link",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Unusual sign-in activity",
+    "text": "",
+    "html": "<p>We noticed unusual sign-in activity. <a href=\"https://secure-check.example/v\">Review</a></p>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 2,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "credential_lure",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "phrase": "unusual sign-in"
+      }
+     }
+    ]
+   },
+   "words": [
+    "It asks you to act on your account (\"unusual sign-in\") and has a link."
+   ]
+  },
+  {
+   "name": "credential-lure-no-link",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Please verify your account",
+    "text": "Reply with your details.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "wallet-phish-brand-in-subject",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Trust",
+     "address": "trust-support@demirsoft.example"
+    },
+    "reply_to": [],
+    "subject": "Please verify your Trust Wallet",
+    "text": "Our system has shown that your wallet has not been verified yet. Unverified accounts will be suspended after October 18, 2026. Please make sure to verify your wallet as soon as possible.",
+    "html": "<p>Click the button below to verify your address linked to your wallet:</p><a href=\"https://verify.demirsoft.example/w\">Verify</a>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "brand_in_subject",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "brand": "Trust Wallet",
+       "domain": "demirsoft.example"
+      }
+     },
+     {
+      "code": "credential_lure",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "phrase": "accounts will be suspended"
+      }
+     }
+    ]
+   },
+   "words": [
+    "It says it is from Trust Wallet and asks you to act, but it came from demirsoft.example.",
+    "It asks you to act on your account (\"accounts will be suspended\") and has a link."
+   ]
+  },
+  {
+   "name": "host-phish-brand-in-subject",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "NOTICE",
+     "address": "student184144@school.edu.example"
+    },
+    "reply_to": [],
+    "subject": "The SiteGround Team Update Required.",
+    "text": "Please update your payment information to avoid interruption to your hosting plan.",
+    "html": "<a href=\"https://pay.other.example/sg\">Update Payment Method</a>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "brand_in_subject",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "brand": "SiteGround",
+       "domain": "school.edu.example"
+      }
+     },
+     {
+      "code": "credential_lure",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "phrase": "update your payment"
+      }
+     }
+    ]
+   },
+   "words": [
+    "It says it is from SiteGround and asks you to act, but it came from school.edu.example.",
+    "It asks you to act on your account (\"update your payment\") and has a link."
+   ]
+  },
+  {
+   "name": "brand-in-subject-no-lure",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Crypto Weekly",
+     "address": "news@cryptoweekly.example"
+    },
+    "reply_to": [],
+    "subject": "What's new in MetaMask this week",
+    "text": "Thanks for your order. It is on its way.",
+    "html": "<a href=\"https://cryptoweekly.example/1\">Read</a>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 0,
+    "reasons": []
+   },
+   "words": []
+  },
+  {
+   "name": "brand-in-subject-from-brand",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Trust Wallet",
+     "address": "support@trustwallet.com"
+    },
+    "reply_to": [],
+    "subject": "Verify your Trust Wallet",
+    "text": "Please verify your wallet: https://trustwallet.com/verify",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 2,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "credential_lure",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "phrase": "verify your wallet"
+      }
+     }
+    ]
+   },
+   "words": [
+    "It asks you to act on your account (\"verify your wallet\") and has a link."
+   ]
+  },
+  {
+   "name": "brand-in-name-and-subject",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "PayPal",
+     "address": "service@pp-notice.example"
+    },
+    "reply_to": [],
+    "subject": "PayPal: your account will be suspended",
+    "text": "Sign in at https://pp-notice.example/s",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "brand_mismatch",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "brand": "PayPal",
+       "domain": "pp-notice.example"
+      }
+     },
+     {
+      "code": "credential_lure",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "phrase": "account will be suspended"
+      }
+     }
+    ]
+   },
+   "words": [
+    "The sender's name says PayPal, but it came from pp-notice.example.",
+    "It asks you to act on your account (\"account will be suspended\") and has a link."
+   ]
+  },
+  {
+   "name": "brand-in-subject-forwarded",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Pat",
+     "address": "pat@gmail.com"
+    },
+    "reply_to": [],
+    "subject": " Fwd: Action Required on Apple Order W100",
+    "text": "---------- Forwarded message ---------\nPlease verify your account: https://apple.example/o",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 2,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "credential_lure",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "phrase": "verify your account"
+      }
+     }
+    ]
+   },
+   "words": [
+    "It asks you to act on your account (\"verify your account\") and has a link."
+   ]
+  },
+  {
+   "name": "brand-in-subject-case-unkept",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Support",
+     "address": "help@wallets.example"
+    },
+    "reply_to": [],
+    "subject": "İmportant from METAMASK: verify your wallet",
+    "text": "Go to https://wallets.example/v",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 4,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "brand_in_subject",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "brand": "metamask",
+       "domain": "wallets.example"
+      }
+     },
+     {
+      "code": "credential_lure",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "phrase": "verify your wallet"
+      }
+     }
+    ]
+   },
+   "words": [
+    "It says it is from metamask and asks you to act, but it came from wallets.example.",
+    "It asks you to act on your account (\"verify your wallet\") and has a link."
+   ]
+  },
+  {
+   "name": "classic-phish",
+   "input": {
+    "headers": [
+     {
+      "key": "authentication-results",
+      "value": "mx.cloudflare.net; dkim=none; spf=fail; dmarc=fail"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "PayPal",
+     "address": "service@paypal-secure.example"
+    },
+    "reply_to": [],
+    "subject": "Your account has been limited",
+    "text": "Thanks for your order. It is on its way.",
+    "html": "<a href=\"https://paypal.secure-login.example/\">www.paypal.com</a>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "phishing",
+    "phish": 11,
+    "spam": 0,
+    "reasons": [
+     {
+      "code": "dmarc_fail",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "domain": "paypal-secure.example"
+      }
+     },
+     {
+      "code": "spf_fail",
+      "family": "phish",
+      "weight": 1,
+      "detail": {
+       "domain": "paypal-secure.example"
+      }
+     },
+     {
+      "code": "brand_mismatch",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "brand": "PayPal",
+       "domain": "paypal-secure.example"
+      }
+     },
+     {
+      "code": "link_text_mismatch",
+      "family": "phish",
+      "weight": 3,
+      "detail": {
+       "shown": "www.paypal.com",
+       "actual": "paypal.secure-login.example"
+      }
+     },
+     {
+      "code": "credential_lure",
+      "family": "phish",
+      "weight": 2,
+      "detail": {
+       "phrase": "account has been limited"
+      }
+     }
+    ]
+   },
+   "words": [
+    "The sender's domain (paypal-secure.example) says it did not send this (DMARC failed).",
+    "It came from a server paypal-secure.example does not send from (SPF failed).",
+    "The sender's name says PayPal, but it came from paypal-secure.example.",
+    "A link shows www.paypal.com but goes to paypal.secure-login.example.",
+    "It asks you to act on your account (\"account has been limited\") and has a link."
+   ]
+  },
+  {
+   "name": "gmail-spam-label",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": [
+     "SPAM",
+     "UNREAD"
+    ]
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "spam",
+    "phish": 0,
+    "spam": 4,
+    "reasons": [
+     {
+      "code": "gmail_spam",
+      "family": "spam",
+      "weight": 4,
+      "detail": {}
+     }
+    ]
+   },
+   "words": [
+    "Gmail had it in Spam."
+   ]
+  },
+  {
+   "name": "upstream-spam-flag",
+   "input": {
+    "headers": [
+     {
+      "key": "authentication-results",
+      "value": "mx.cloudflare.net; dmarc=pass"
+     },
+     {
+      "key": "x-spam-flag",
+      "value": "YES"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "spam",
+    "phish": 0,
+    "spam": 3,
+    "reasons": [
+     {
+      "code": "upstream_spam",
+      "family": "spam",
+      "weight": 3,
+      "detail": {}
+     }
+    ]
+   },
+   "words": [
+    "A mail server on the way marked it as spam."
+   ]
+  },
+  {
+   "name": "spam-phrases",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "YOU HAVE WON A PRIZE!!!",
+    "text": "Dear friend, claim your prize now. 100% free, act now.",
+    "html": null,
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "spam",
+    "phish": 0,
+    "spam": 3,
+    "reasons": [
+     {
+      "code": "spam_phrases",
+      "family": "spam",
+      "weight": 2,
+      "detail": {
+       "phrase": "you have won",
+       "more": " and 4 more"
+      }
+     },
+     {
+      "code": "shouting_subject",
+      "family": "spam",
+      "weight": 1,
+      "detail": {}
+     }
+    ]
+   },
+   "words": [
+    "It reads like spam (\"you have won\" and 4 more).",
+    "The subject shouts."
+   ]
+  },
+  {
+   "name": "bulk-no-unsubscribe",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Deals",
+    "text": "Thanks for your order. It is on its way.",
+    "html": null,
+    "attachments": [],
+    "list_id": "<deals.example>",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "clean",
+    "phish": 0,
+    "spam": 1,
+    "reasons": [
+     {
+      "code": "bulk_no_unsubscribe",
+      "family": "spam",
+      "weight": 1,
+      "detail": {}
+     }
+    ]
+   },
+   "words": [
+    "It is bulk mail with no way to unsubscribe."
+   ]
+  },
+  {
+   "name": "html-only-body-words",
+   "input": {
+    "headers": [
+     {
+      "key": "arc-authentication-results",
+      "value": "i=1; mx.cloudflare.net; dkim=pass header.d=shop.example; dmarc=pass header.from=shop.example; spf=pass smtp.mailfrom=shop.example"
+     },
+     {
+      "key": "received",
+      "value": "from mail.shop.example by mx.cloudflare.net"
+     }
+    ],
+    "auth": null,
+    "from": {
+     "name": "Shop",
+     "address": "hello@shop.example"
+    },
+    "reply_to": [],
+    "subject": "Your order has shipped",
+    "text": "",
+    "html": "<p>You have won the lottery. Act now.</p>",
+    "attachments": [],
+    "list_id": "",
+    "list_unsubscribe": "",
+    "labels": []
+   },
+   "ctx": {
+    "own_domains": [
+     "wuli.nu",
+     "example.org"
+    ]
+   },
+   "result": {
+    "v": 2,
+    "verdict": "suspicious",
+    "phish": 0,
+    "spam": 2,
+    "reasons": [
+     {
+      "code": "spam_phrases",
+      "family": "spam",
+      "weight": 2,
+      "detail": {
+       "phrase": "you have won",
+       "more": " and 2 more"
+      }
+     }
+    ]
+   },
+   "words": [
+    "It reads like spam (\"you have won\" and 2 more)."
+   ]
+  }
+ ]
+}

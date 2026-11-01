@@ -1,0 +1,21 @@
+From: Maya Lindqvist <maya@nordic-press.example>
+To: alex@wuli.nu
+Subject: Invoice 2026-0912
+Date: Sat, 12 Sep 2026 14:32:12 +0000
+Message-ID: <13@example.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b2"
+
+--b2
+Content-Type: text/plain; charset=utf-8
+
+Invoice attached. Net 30.
+
+--b2
+Content-Type: application/pdf; name="invoice-2026-0912.pdf"
+Content-Disposition: attachment; filename="invoice-2026-0912.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwvVHlwZS9DYXRhbG9nPj4KZW5kb2JqCg==
+
+--b2--

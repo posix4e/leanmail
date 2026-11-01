@@ -1,0 +1,17 @@
+# The image needs lean/, server/ (including server/.cache/, the toolchain tarball) and web/ (the pages' CSS and JS).
+.git
+**/.lake
+**/node_modules
+**/.wrangler
+**/.DS_Store
+**/.env
+**/.env.*
+data
+app
+docs
+worker
+.github
+lean/test/out
+server/.secrets
+server/.cache/*.part
+*.md

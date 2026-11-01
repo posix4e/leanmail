@@ -1,0 +1,1493 @@
+# LeanMail specification
+
+Generated 2026-11-01 (UTC) by `scripts/spec.sh` from the test suites. Do not edit by hand.
+
+1433 passing checks: core-test 64, address-test 103, ical-test 666, junk-test 117, server-test 393, worker 73, cli-smoke 17.
+
+Each bullet is the name of a check that passed, in the order its suite runs it. To change
+this file, change the tests and run `make spec`; CI fails when it is out of date.
+
+## core-test
+
+`lean/test`, run as `lake build core-test && ./.lake/build/bin/core-test`; 64 checks.
+
+- a header line splits into a trimmed name and value
+- a header value keeps colons after the first
+- a response header is found regardless of case
+- base64 encodes the RFC 4648 vectors
+- base64 decodes the RFC 4648 vectors
+- base64 decode skips line breaks and tolerates missing padding
+- base64url round-trips all byte values
+- a ulid of time zero and zero randomness is all zeros
+- a ulid is 26 characters and valid
+- a ulid carries its timestamp
+- the largest 48-bit time encodes as 7ZZZZZZZZZ
+- ulids order by time as strings
+- a ulid with a leading 8 is rejected
+- confusable letters normalize to digits
+- mime-vectors.json has cases
+- mime vector eml/01.eml parses to postal-mime's parts
+- mime vector eml/02.eml parses to postal-mime's parts
+- mime vector eml/03.eml parses to postal-mime's parts
+- mime vector eml/04.eml parses to postal-mime's parts
+- mime vector eml/05.eml parses to postal-mime's parts
+- mime vector eml/06.eml parses to postal-mime's parts
+- mime vector eml/07.eml parses to postal-mime's parts
+- mime vector eml/08.eml parses to postal-mime's parts
+- mime vector eml/09.eml parses to postal-mime's parts
+- mime vector eml/10.eml parses to postal-mime's parts
+- mime vector eml/11.eml parses to postal-mime's parts
+- mime vector eml/12.eml parses to postal-mime's parts
+- mime vector eml/13.eml parses to postal-mime's parts
+- mime vector eml/14.eml parses to postal-mime's parts
+- mime vector eml/14b.eml parses to postal-mime's parts
+- mime vector related-inline-image parses to postal-mime's parts
+- mime vector latin1-quoted-printable parses to postal-mime's parts
+- mime vector windows-1252-and-encoded-filenames parses to postal-mime's parts
+- mime vector nested-alternative-with-attachment parses to postal-mime's parts
+- mime vector calendar-request parses to postal-mime's parts
+- mime vector forwarded-message parses to postal-mime's parts
+- mime vector html-only parses to postal-mime's parts
+- mime vector base64-text-single-part parses to postal-mime's parts
+- mime vector no-content-type-8bit parses to postal-mime's parts
+- mime vector attachment-without-name parses to postal-mime's parts
+- a message's from is its first From address, name and address
+- a message's to lists the parsed To addresses
+- a message without Cc, Bcc or Reply-To has empty lists for them
+- a message's subject is its decoded Subject
+- a message's messageId is its Message-ID
+- a message's date is parsed to epoch milliseconds
+- a message's ISO date is postal-mime's message.date
+- the old accessors still read the same fields
+- an inlined message (basic) gets postal-mime's text header block
+- an inlined message (basic) gets postal-mime's html header block
+- an inlined message (group-and-encoded) gets postal-mime's text header block
+- an inlined message (group-and-encoded) gets postal-mime's html header block
+- an inlined message (bad-date) gets postal-mime's text header block
+- an inlined message (bad-date) gets postal-mime's html header block
+- an inlined message (midnight-html) gets postal-mime's text header block
+- an inlined message (midnight-html) gets postal-mime's html header block
+- an inlined message (long-to) gets postal-mime's text header block
+- an inlined message (long-to) gets postal-mime's html header block
+- an inlined message (empty-and-odd) gets postal-mime's text header block
+- an inlined message (empty-and-odd) gets postal-mime's html header block
+- an inlined message (mixed-both) gets postal-mime's text header block
+- an inlined message (mixed-both) gets postal-mime's html header block
+- an inlined message (group-html) gets postal-mime's text header block
+- an inlined message (group-html) gets postal-mime's html header block
+
+## address-test
+
+`lean/test`, run as `lake build address-test && ./.lake/build/bin/address-test`; 103 checks.
+
+- a plain address has no name
+- a name before an angle address is the display name
+- a comma inside a quoted name does not split the address
+- a group keeps its name and members
+- flattening a group yields its members
+- a comment after a bare address becomes the name
+- an encoded-word name is decoded
+- semicolons separate addresses like commas
+- a bare encoded word with no address is a name only
+- a bare encoded address is never made a recipient
+- an encoded word holding an angle address is re-parsed
+- text with two at-signs yields the address token and the rest as name
+- a lone address with two at-signs is kept whole
+- Apple Mail truncation drops everything before an unexpected <
+- a quoted local part glued to a domain stays one address
+- a nested group is flattened into its parent
+- a quoted name glued to more text joins into one word
+- escaped quotes inside a quoted name are kept
+- a word with no at-sign is a name with no address
+- an angle address alone has no name
+- an empty field has no addresses
+- an empty group is kept with no members
+- flattening drops an empty group
+- non-breaking spaces around a name are trimmed
+- an empty entry between commas is skipped
+- a folded line break inside a field is whitespace
+- an empty quoted name gives no name
+- only the first angle address is the address
+- an address-looking name before an angle address stays the name
+- a mailbox formats as name <address>
+- a mailbox with no name formats as the bare address
+- a group formats as name:members;
+- name and address accessors read a mailbox and a group
+- an RFC 5322 date with +0000 parses
+- a date without day name or seconds parses as UTC
+- an ISO 8601 Z date parses
+- an ISO 8601 date with milliseconds and offset parses
+- an ISO date alone is midnight UTC
+- a trailing zone comment is ignored
+- extra whitespace and GMT are tolerated
+- a two-digit year below 50 is 20xx and EST is -0500
+- a two-digit year of 50 or more is 19xx
+- a one-digit day and a half-hour offset parse
+- the JavaScript toString form parses
+- month-first with a comma and PM parses
+- asctime order parses
+- a military zone letter reads as +0000
+- PDT is -0700
+- CDT is -0500
+- Sept is a month name
+- a sentence is not a date
+- an impossible day of month is rejected
+- the epoch formats as RFC 5322 and ISO
+- a date formats as RFC 5322 like the fixtures
+- a date formats as ISO like toISOString
+- dates round-trip through both formats
+- milliseconds round-trip through ISO
+- days-from-civil inverts civil-from-days across four centuries
+- 01.eml From has at least one address with an at-sign
+- 01.eml To has at least one address with an at-sign
+- 01.eml has a Date header that parses
+- 02.eml From has at least one address with an at-sign
+- 02.eml To has at least one address with an at-sign
+- 02.eml has a Date header that parses
+- 03.eml From has at least one address with an at-sign
+- 03.eml To has at least one address with an at-sign
+- 03.eml has a Date header that parses
+- 04.eml From has at least one address with an at-sign
+- 04.eml To has at least one address with an at-sign
+- 04.eml has a Date header that parses
+- 05.eml From has at least one address with an at-sign
+- 05.eml To has at least one address with an at-sign
+- 05.eml has a Date header that parses
+- 06.eml From has at least one address with an at-sign
+- 06.eml To has at least one address with an at-sign
+- 06.eml has a Date header that parses
+- 07.eml From has at least one address with an at-sign
+- 07.eml To has at least one address with an at-sign
+- 07.eml has a Date header that parses
+- 08.eml From has at least one address with an at-sign
+- 08.eml To has at least one address with an at-sign
+- 08.eml has a Date header that parses
+- 09.eml From has at least one address with an at-sign
+- 09.eml To has at least one address with an at-sign
+- 09.eml has a Date header that parses
+- 10.eml From has at least one address with an at-sign
+- 10.eml To has at least one address with an at-sign
+- 10.eml has a Date header that parses
+- 11.eml From has at least one address with an at-sign
+- 11.eml To has at least one address with an at-sign
+- 11.eml has a Date header that parses
+- 12.eml From has at least one address with an at-sign
+- 12.eml To has at least one address with an at-sign
+- 12.eml has a Date header that parses
+- 13.eml From has at least one address with an at-sign
+- 13.eml To has at least one address with an at-sign
+- 13.eml has a Date header that parses
+- 14.eml From has at least one address with an at-sign
+- 14.eml To has at least one address with an at-sign
+- 14.eml has a Date header that parses
+- 14b.eml From has at least one address with an at-sign
+- 14b.eml To has at least one address with an at-sign
+- 14b.eml has a Date header that parses
+
+## ical-test
+
+`lean/test`, run as `lake build ical-test && ./.lake/build/bin/ical-test`; 666 checks.
+
+- zone 2026-03-08T01:59:59 in America/Los_Angeles is 1772963999000 ms
+- zone 1772963999000 ms in America/Los_Angeles reads 2026-03-08T01:59:59
+- zone 2026-03-08T02:00:00 in America/Los_Angeles is 1772964000000 ms
+- zone 1772964000000 ms in America/Los_Angeles reads 2026-03-08T03:00:00
+- zone 2026-03-08T02:30:00 in America/Los_Angeles is 1772965800000 ms
+- zone 1772965800000 ms in America/Los_Angeles reads 2026-03-08T03:30:00
+- zone 2026-03-08T03:00:00 in America/Los_Angeles is 1772964000000 ms
+- zone 1772964000000 ms in America/Los_Angeles reads 2026-03-08T03:00:00
+- zone 2026-11-01T00:59:59 in America/Los_Angeles is 1793519999000 ms
+- zone 1793519999000 ms in America/Los_Angeles reads 2026-11-01T00:59:59
+- zone 2026-11-01T01:00:00 in America/Los_Angeles is 1793520000000 ms
+- zone 1793520000000 ms in America/Los_Angeles reads 2026-11-01T01:00:00
+- zone 2026-11-01T01:30:00 in America/Los_Angeles is 1793521800000 ms
+- zone 1793521800000 ms in America/Los_Angeles reads 2026-11-01T01:30:00
+- zone 2026-11-01T02:00:00 in America/Los_Angeles is 1793527200000 ms
+- zone 1793527200000 ms in America/Los_Angeles reads 2026-11-01T02:00:00
+- zone 2026-03-29T02:30:00 in Europe/Berlin is 1774747800000 ms
+- zone 1774747800000 ms in Europe/Berlin reads 2026-03-29T03:30:00
+- zone 2026-10-25T02:30:00 in Europe/Berlin is 1792891800000 ms
+- zone 1792891800000 ms in Europe/Berlin reads 2026-10-25T02:30:00
+- zone 2026-10-04T02:30:00 in Australia/Lord_Howe is 1791041400000 ms
+- zone 1791041400000 ms in Australia/Lord_Howe reads 2026-10-04T02:30:00
+- zone 2026-04-05T01:45:00 in Australia/Lord_Howe is 1775315700000 ms
+- zone 1775315700000 ms in Australia/Lord_Howe reads 2026-04-05T01:45:00
+- zone 2026-06-15T12:00:00 in Asia/Kathmandu is 1781504100000 ms
+- zone 1781504100000 ms in Asia/Kathmandu reads 2026-06-15T12:00:00
+- zone 2026-01-01T00:00:00 in Pacific/Kiritimati is 1767175200000 ms
+- zone 1767175200000 ms in Pacific/Kiritimati reads 2026-01-01T00:00:00
+- zone 2026-01-01T00:00:00 in UTC is 1767225600000 ms
+- zone 1767225600000 ms in UTC reads 2026-01-01T00:00:00
+- zone 2026-01-01T00:00:00 in null is 1767225600000 ms
+- zone 1767225600000 ms in null reads 2026-01-01T00:00:00
+- zone 1995-07-04T12:00:00 in America/New_York is 804873600000 ms
+- zone 804873600000 ms in America/New_York reads 1995-07-04T12:00:00
+- parse allday.ics#allday-two-days@example.com 
+- parse allday.ics#allday-no-dtend@example.com 
+- parse apple-invite.ics#6A1B2C3D-4E5F-4A6B-8C7D-9E0F1A2B3C4D 
+- parse dst-la.ics#dst-la-monday-9am@google.com 
+- parse duration.ics#duration-only-9f8e@zimbra.example 
+- parse google-cancel.ics#7k2q9c1v3b5n8m4x6z0a2s4d@google.com 
+- parse google-feed.ics#floating-in-feed@google.com 
+- parse google-request.ics#7k2q9c1v3b5n8m4x6z0a2s4d@google.com 
+- parse no-uid.ics#mv-641b5c2257658ee994df77a095d14001b4bb90354daa3a07e31359379d69c2be 
+- parse outlook-request.ics#040000008200E00074C5B7101A82E00800000000A0B1C2D3E4F5DA01000000000000000010000000ABCDEF0123456789ABCDEF0123456789 
+- parse puerto-rico.ics#pr-weekly-sync-0001@contoso.example 
+- parse puerto-rico.ics#custom-tz-0002@contoso.example 
+- parse puerto-rico.ics#prefixed-tz-0003@contoso.example 
+- parse puerto-rico.ics#unknown-tz-0004@contoso.example 
+- parse recurring-override.ics#weekly-standup-4d2c@google.com 
+- parse recurring-override.ics#weekly-standup-4d2c@google.com T1779994800
+- parse rrule-matrix.ics#daily-interval-2-count-5 
+- parse rrule-matrix.ics#weekly-mo-we-until 
+- parse rrule-matrix.ics#monthly-last-day 
+- parse rrule-matrix.ics#monthly-second-tuesday 
+- parse rrule-matrix.ics#yearly-last-sunday-march 
+- parse rrule-matrix.ics#monthly-last-weekday 
+- parse rrule-matrix.ics#unsupported-byhour 
+- parse rrule-matrix.ics#unsupported-hourly 
+- parse exdate-and-rdate#exr@x 
+- parse spring-forward-gap#gap@x 
+- parse fall-back-ambiguous#amb@x 
+- parse wkst-sunday-biweekly#wkst@x 
+- parse monthly-31st#m31@x 
+- parse monthly-friday-13th#f13@x 
+- parse yearly-leap-day#leap@x 
+- parse yearly-20th-monday#y20@x 
+- parse yearly-two-months#y2m@x 
+- parse allday-weekly-with-override-and-cancel#adw@x 
+- parse allday-weekly-with-override-and-cancel#adw@x D20260309
+- parse allday-weekly-with-override-and-cancel#adw@x D20260323
+- parse override-moved-out-of-its-week#mov@x 
+- parse override-moved-out-of-its-week#mov@x T1769022000
+- parse this-and-future#taf@x 
+- parse this-and-future#taf@x T1770019200
+- parse floating#flt@x 
+- parse utc-monthly-last-weekday#utc@x 
+- parse fixed-offset#fix@x 
+- parse long-event-overlapping-range#long@x 
+- parse rdate-only#rd@x 
+- parse single-cancelled#can@x 
+- parse allday.ics yields 2 events
+- parse apple-invite.ics yields 1 events
+- parse dst-la.ics yields 1 events
+- parse duration.ics yields 1 events
+- parse google-cancel.ics yields 1 events
+- parse google-feed.ics yields 1 events
+- parse google-request.ics yields 1 events
+- parse no-uid.ics yields 1 events
+- parse outlook-request.ics yields 1 events
+- parse puerto-rico.ics yields 4 events
+- parse recurring-override.ics yields 2 events
+- parse rrule-matrix.ics yields 8 events
+- parse exdate-and-rdate yields 1 events
+- parse spring-forward-gap yields 1 events
+- parse fall-back-ambiguous yields 1 events
+- parse wkst-sunday-biweekly yields 1 events
+- parse monthly-31st yields 1 events
+- parse monthly-friday-13th yields 1 events
+- parse yearly-leap-day yields 1 events
+- parse yearly-20th-monday yields 1 events
+- parse yearly-two-months yields 1 events
+- parse allday-weekly-with-override-and-cancel yields 3 events
+- parse override-moved-out-of-its-week yields 2 events
+- parse this-and-future yields 2 events
+- parse floating yields 1 events
+- parse utc-monthly-last-weekday yields 1 events
+- parse fixed-offset yields 1 events
+- parse long-event-overlapping-range yields 1 events
+- parse rdate-only yields 1 events
+- parse single-cancelled yields 1 events
+- expand allday.ics#allday-two-days@example.com first-year
+- lastEnd allday.ics#allday-two-days@example.com first-year
+- expand allday.ics#allday-no-dtend@example.com first-year
+- lastEnd allday.ics#allday-no-dtend@example.com first-year
+- expand apple-invite.ics#6A1B2C3D-4E5F-4A6B-8C7D-9E0F1A2B3C4D first-year
+- lastEnd apple-invite.ics#6A1B2C3D-4E5F-4A6B-8C7D-9E0F1A2B3C4D first-year
+- expand dst-la.ics#dst-la-monday-9am@google.com first-year
+- lastEnd dst-la.ics#dst-la-monday-9am@google.com first-year
+- RRule.expand dst-la.ics#dst-la-monday-9am@google.com first-year
+- expand dst-la.ics#dst-la-monday-9am@google.com later
+- lastEnd dst-la.ics#dst-la-monday-9am@google.com later
+- RRule.expand dst-la.ics#dst-la-monday-9am@google.com later
+- expand dst-la.ics#dst-la-monday-9am@google.com from-auckland
+- lastEnd dst-la.ics#dst-la-monday-9am@google.com from-auckland
+- RRule.expand dst-la.ics#dst-la-monday-9am@google.com from-auckland
+- expand dst-la.ics#dst-la-monday-9am@google.com mid-instance
+- lastEnd dst-la.ics#dst-la-monday-9am@google.com mid-instance
+- RRule.expand dst-la.ics#dst-la-monday-9am@google.com mid-instance
+- expand duration.ics#duration-only-9f8e@zimbra.example first-year
+- lastEnd duration.ics#duration-only-9f8e@zimbra.example first-year
+- expand google-cancel.ics#7k2q9c1v3b5n8m4x6z0a2s4d@google.com first-year
+- lastEnd google-cancel.ics#7k2q9c1v3b5n8m4x6z0a2s4d@google.com first-year
+- expand google-feed.ics#floating-in-feed@google.com first-year
+- lastEnd google-feed.ics#floating-in-feed@google.com first-year
+- expand google-request.ics#7k2q9c1v3b5n8m4x6z0a2s4d@google.com first-year
+- lastEnd google-request.ics#7k2q9c1v3b5n8m4x6z0a2s4d@google.com first-year
+- expand no-uid.ics#mv-641b5c2257658ee994df77a095d14001b4bb90354daa3a07e31359379d69c2be first-year
+- lastEnd no-uid.ics#mv-641b5c2257658ee994df77a095d14001b4bb90354daa3a07e31359379d69c2be first-year
+- expand outlook-request.ics#040000008200E00074C5B7101A82E00800000000A0B1C2D3E4F5DA01000000000000000010000000ABCDEF0123456789ABCDEF0123456789 first-year
+- lastEnd outlook-request.ics#040000008200E00074C5B7101A82E00800000000A0B1C2D3E4F5DA01000000000000000010000000ABCDEF0123456789ABCDEF0123456789 first-year
+- expand puerto-rico.ics#pr-weekly-sync-0001@contoso.example first-year
+- lastEnd puerto-rico.ics#pr-weekly-sync-0001@contoso.example first-year
+- RRule.expand puerto-rico.ics#pr-weekly-sync-0001@contoso.example first-year
+- expand puerto-rico.ics#pr-weekly-sync-0001@contoso.example later
+- lastEnd puerto-rico.ics#pr-weekly-sync-0001@contoso.example later
+- RRule.expand puerto-rico.ics#pr-weekly-sync-0001@contoso.example later
+- expand puerto-rico.ics#pr-weekly-sync-0001@contoso.example from-auckland
+- lastEnd puerto-rico.ics#pr-weekly-sync-0001@contoso.example from-auckland
+- RRule.expand puerto-rico.ics#pr-weekly-sync-0001@contoso.example from-auckland
+- expand puerto-rico.ics#pr-weekly-sync-0001@contoso.example mid-instance
+- lastEnd puerto-rico.ics#pr-weekly-sync-0001@contoso.example mid-instance
+- RRule.expand puerto-rico.ics#pr-weekly-sync-0001@contoso.example mid-instance
+- expand puerto-rico.ics#custom-tz-0002@contoso.example first-year
+- lastEnd puerto-rico.ics#custom-tz-0002@contoso.example first-year
+- expand puerto-rico.ics#prefixed-tz-0003@contoso.example first-year
+- lastEnd puerto-rico.ics#prefixed-tz-0003@contoso.example first-year
+- expand puerto-rico.ics#unknown-tz-0004@contoso.example first-year
+- lastEnd puerto-rico.ics#unknown-tz-0004@contoso.example first-year
+- expand recurring-override.ics#weekly-standup-4d2c@google.com first-year
+- lastEnd recurring-override.ics#weekly-standup-4d2c@google.com first-year
+- expand recurring-override.ics#weekly-standup-4d2c@google.com later
+- lastEnd recurring-override.ics#weekly-standup-4d2c@google.com later
+- expand recurring-override.ics#weekly-standup-4d2c@google.com from-auckland
+- lastEnd recurring-override.ics#weekly-standup-4d2c@google.com from-auckland
+- expand recurring-override.ics#weekly-standup-4d2c@google.com mid-instance
+- lastEnd recurring-override.ics#weekly-standup-4d2c@google.com mid-instance
+- expand recurring-override.ics#weekly-standup-4d2c@google.com override-alone T1779994800
+- lastEnd recurring-override.ics#weekly-standup-4d2c@google.com override-alone T1779994800
+- expand rrule-matrix.ics#daily-interval-2-count-5 first-year
+- lastEnd rrule-matrix.ics#daily-interval-2-count-5 first-year
+- RRule.expand rrule-matrix.ics#daily-interval-2-count-5 first-year
+- expand rrule-matrix.ics#daily-interval-2-count-5 later
+- lastEnd rrule-matrix.ics#daily-interval-2-count-5 later
+- RRule.expand rrule-matrix.ics#daily-interval-2-count-5 later
+- expand rrule-matrix.ics#daily-interval-2-count-5 from-auckland
+- lastEnd rrule-matrix.ics#daily-interval-2-count-5 from-auckland
+- RRule.expand rrule-matrix.ics#daily-interval-2-count-5 from-auckland
+- expand rrule-matrix.ics#daily-interval-2-count-5 mid-instance
+- lastEnd rrule-matrix.ics#daily-interval-2-count-5 mid-instance
+- RRule.expand rrule-matrix.ics#daily-interval-2-count-5 mid-instance
+- expand rrule-matrix.ics#weekly-mo-we-until first-year
+- lastEnd rrule-matrix.ics#weekly-mo-we-until first-year
+- RRule.expand rrule-matrix.ics#weekly-mo-we-until first-year
+- expand rrule-matrix.ics#weekly-mo-we-until later
+- lastEnd rrule-matrix.ics#weekly-mo-we-until later
+- RRule.expand rrule-matrix.ics#weekly-mo-we-until later
+- expand rrule-matrix.ics#weekly-mo-we-until from-auckland
+- lastEnd rrule-matrix.ics#weekly-mo-we-until from-auckland
+- RRule.expand rrule-matrix.ics#weekly-mo-we-until from-auckland
+- expand rrule-matrix.ics#weekly-mo-we-until mid-instance
+- lastEnd rrule-matrix.ics#weekly-mo-we-until mid-instance
+- RRule.expand rrule-matrix.ics#weekly-mo-we-until mid-instance
+- expand rrule-matrix.ics#monthly-last-day first-year
+- lastEnd rrule-matrix.ics#monthly-last-day first-year
+- RRule.expand rrule-matrix.ics#monthly-last-day first-year
+- expand rrule-matrix.ics#monthly-last-day later
+- lastEnd rrule-matrix.ics#monthly-last-day later
+- RRule.expand rrule-matrix.ics#monthly-last-day later
+- expand rrule-matrix.ics#monthly-last-day from-auckland
+- lastEnd rrule-matrix.ics#monthly-last-day from-auckland
+- RRule.expand rrule-matrix.ics#monthly-last-day from-auckland
+- expand rrule-matrix.ics#monthly-last-day mid-instance
+- lastEnd rrule-matrix.ics#monthly-last-day mid-instance
+- RRule.expand rrule-matrix.ics#monthly-last-day mid-instance
+- expand rrule-matrix.ics#monthly-second-tuesday first-year
+- lastEnd rrule-matrix.ics#monthly-second-tuesday first-year
+- RRule.expand rrule-matrix.ics#monthly-second-tuesday first-year
+- expand rrule-matrix.ics#monthly-second-tuesday later
+- lastEnd rrule-matrix.ics#monthly-second-tuesday later
+- RRule.expand rrule-matrix.ics#monthly-second-tuesday later
+- expand rrule-matrix.ics#monthly-second-tuesday from-auckland
+- lastEnd rrule-matrix.ics#monthly-second-tuesday from-auckland
+- RRule.expand rrule-matrix.ics#monthly-second-tuesday from-auckland
+- expand rrule-matrix.ics#monthly-second-tuesday mid-instance
+- lastEnd rrule-matrix.ics#monthly-second-tuesday mid-instance
+- RRule.expand rrule-matrix.ics#monthly-second-tuesday mid-instance
+- expand rrule-matrix.ics#yearly-last-sunday-march first-year
+- lastEnd rrule-matrix.ics#yearly-last-sunday-march first-year
+- RRule.expand rrule-matrix.ics#yearly-last-sunday-march first-year
+- expand rrule-matrix.ics#yearly-last-sunday-march later
+- lastEnd rrule-matrix.ics#yearly-last-sunday-march later
+- RRule.expand rrule-matrix.ics#yearly-last-sunday-march later
+- expand rrule-matrix.ics#yearly-last-sunday-march from-auckland
+- lastEnd rrule-matrix.ics#yearly-last-sunday-march from-auckland
+- RRule.expand rrule-matrix.ics#yearly-last-sunday-march from-auckland
+- expand rrule-matrix.ics#yearly-last-sunday-march mid-instance
+- lastEnd rrule-matrix.ics#yearly-last-sunday-march mid-instance
+- RRule.expand rrule-matrix.ics#yearly-last-sunday-march mid-instance
+- expand rrule-matrix.ics#monthly-last-weekday first-year
+- lastEnd rrule-matrix.ics#monthly-last-weekday first-year
+- RRule.expand rrule-matrix.ics#monthly-last-weekday first-year
+- expand rrule-matrix.ics#monthly-last-weekday later
+- lastEnd rrule-matrix.ics#monthly-last-weekday later
+- RRule.expand rrule-matrix.ics#monthly-last-weekday later
+- expand rrule-matrix.ics#monthly-last-weekday from-auckland
+- lastEnd rrule-matrix.ics#monthly-last-weekday from-auckland
+- RRule.expand rrule-matrix.ics#monthly-last-weekday from-auckland
+- expand rrule-matrix.ics#monthly-last-weekday mid-instance
+- lastEnd rrule-matrix.ics#monthly-last-weekday mid-instance
+- RRule.expand rrule-matrix.ics#monthly-last-weekday mid-instance
+- expand rrule-matrix.ics#unsupported-byhour first-year
+- lastEnd rrule-matrix.ics#unsupported-byhour first-year
+- RRule.expand rrule-matrix.ics#unsupported-byhour first-year
+- expand rrule-matrix.ics#unsupported-byhour later
+- lastEnd rrule-matrix.ics#unsupported-byhour later
+- RRule.expand rrule-matrix.ics#unsupported-byhour later
+- expand rrule-matrix.ics#unsupported-byhour from-auckland
+- lastEnd rrule-matrix.ics#unsupported-byhour from-auckland
+- RRule.expand rrule-matrix.ics#unsupported-byhour from-auckland
+- expand rrule-matrix.ics#unsupported-byhour mid-instance
+- lastEnd rrule-matrix.ics#unsupported-byhour mid-instance
+- RRule.expand rrule-matrix.ics#unsupported-byhour mid-instance
+- expand rrule-matrix.ics#unsupported-hourly first-year
+- lastEnd rrule-matrix.ics#unsupported-hourly first-year
+- RRule.expand rrule-matrix.ics#unsupported-hourly first-year
+- expand rrule-matrix.ics#unsupported-hourly later
+- lastEnd rrule-matrix.ics#unsupported-hourly later
+- RRule.expand rrule-matrix.ics#unsupported-hourly later
+- expand rrule-matrix.ics#unsupported-hourly from-auckland
+- lastEnd rrule-matrix.ics#unsupported-hourly from-auckland
+- RRule.expand rrule-matrix.ics#unsupported-hourly from-auckland
+- expand rrule-matrix.ics#unsupported-hourly mid-instance
+- lastEnd rrule-matrix.ics#unsupported-hourly mid-instance
+- RRule.expand rrule-matrix.ics#unsupported-hourly mid-instance
+- expand exdate-and-rdate#exr@x first-year
+- lastEnd exdate-and-rdate#exr@x first-year
+- expand exdate-and-rdate#exr@x later
+- lastEnd exdate-and-rdate#exr@x later
+- expand exdate-and-rdate#exr@x from-auckland
+- lastEnd exdate-and-rdate#exr@x from-auckland
+- expand exdate-and-rdate#exr@x mid-instance
+- lastEnd exdate-and-rdate#exr@x mid-instance
+- expand spring-forward-gap#gap@x first-year
+- lastEnd spring-forward-gap#gap@x first-year
+- RRule.expand spring-forward-gap#gap@x first-year
+- expand spring-forward-gap#gap@x later
+- lastEnd spring-forward-gap#gap@x later
+- RRule.expand spring-forward-gap#gap@x later
+- expand spring-forward-gap#gap@x from-auckland
+- lastEnd spring-forward-gap#gap@x from-auckland
+- RRule.expand spring-forward-gap#gap@x from-auckland
+- expand spring-forward-gap#gap@x mid-instance
+- lastEnd spring-forward-gap#gap@x mid-instance
+- RRule.expand spring-forward-gap#gap@x mid-instance
+- expand fall-back-ambiguous#amb@x first-year
+- lastEnd fall-back-ambiguous#amb@x first-year
+- RRule.expand fall-back-ambiguous#amb@x first-year
+- expand fall-back-ambiguous#amb@x later
+- lastEnd fall-back-ambiguous#amb@x later
+- RRule.expand fall-back-ambiguous#amb@x later
+- expand fall-back-ambiguous#amb@x from-auckland
+- lastEnd fall-back-ambiguous#amb@x from-auckland
+- RRule.expand fall-back-ambiguous#amb@x from-auckland
+- expand fall-back-ambiguous#amb@x mid-instance
+- lastEnd fall-back-ambiguous#amb@x mid-instance
+- RRule.expand fall-back-ambiguous#amb@x mid-instance
+- expand wkst-sunday-biweekly#wkst@x first-year
+- lastEnd wkst-sunday-biweekly#wkst@x first-year
+- RRule.expand wkst-sunday-biweekly#wkst@x first-year
+- expand wkst-sunday-biweekly#wkst@x later
+- lastEnd wkst-sunday-biweekly#wkst@x later
+- RRule.expand wkst-sunday-biweekly#wkst@x later
+- expand wkst-sunday-biweekly#wkst@x from-auckland
+- lastEnd wkst-sunday-biweekly#wkst@x from-auckland
+- RRule.expand wkst-sunday-biweekly#wkst@x from-auckland
+- expand wkst-sunday-biweekly#wkst@x mid-instance
+- lastEnd wkst-sunday-biweekly#wkst@x mid-instance
+- RRule.expand wkst-sunday-biweekly#wkst@x mid-instance
+- expand monthly-31st#m31@x first-year
+- lastEnd monthly-31st#m31@x first-year
+- RRule.expand monthly-31st#m31@x first-year
+- expand monthly-31st#m31@x later
+- lastEnd monthly-31st#m31@x later
+- RRule.expand monthly-31st#m31@x later
+- expand monthly-31st#m31@x from-auckland
+- lastEnd monthly-31st#m31@x from-auckland
+- RRule.expand monthly-31st#m31@x from-auckland
+- expand monthly-31st#m31@x mid-instance
+- lastEnd monthly-31st#m31@x mid-instance
+- RRule.expand monthly-31st#m31@x mid-instance
+- expand monthly-friday-13th#f13@x first-year
+- lastEnd monthly-friday-13th#f13@x first-year
+- RRule.expand monthly-friday-13th#f13@x first-year
+- expand monthly-friday-13th#f13@x later
+- lastEnd monthly-friday-13th#f13@x later
+- RRule.expand monthly-friday-13th#f13@x later
+- expand monthly-friday-13th#f13@x from-auckland
+- lastEnd monthly-friday-13th#f13@x from-auckland
+- RRule.expand monthly-friday-13th#f13@x from-auckland
+- expand monthly-friday-13th#f13@x mid-instance
+- lastEnd monthly-friday-13th#f13@x mid-instance
+- RRule.expand monthly-friday-13th#f13@x mid-instance
+- expand yearly-leap-day#leap@x first-year
+- lastEnd yearly-leap-day#leap@x first-year
+- RRule.expand yearly-leap-day#leap@x first-year
+- expand yearly-leap-day#leap@x later
+- lastEnd yearly-leap-day#leap@x later
+- RRule.expand yearly-leap-day#leap@x later
+- expand yearly-leap-day#leap@x from-auckland
+- lastEnd yearly-leap-day#leap@x from-auckland
+- RRule.expand yearly-leap-day#leap@x from-auckland
+- expand yearly-leap-day#leap@x mid-instance
+- lastEnd yearly-leap-day#leap@x mid-instance
+- RRule.expand yearly-leap-day#leap@x mid-instance
+- expand yearly-20th-monday#y20@x first-year
+- lastEnd yearly-20th-monday#y20@x first-year
+- RRule.expand yearly-20th-monday#y20@x first-year
+- expand yearly-20th-monday#y20@x later
+- lastEnd yearly-20th-monday#y20@x later
+- RRule.expand yearly-20th-monday#y20@x later
+- expand yearly-20th-monday#y20@x from-auckland
+- lastEnd yearly-20th-monday#y20@x from-auckland
+- RRule.expand yearly-20th-monday#y20@x from-auckland
+- expand yearly-20th-monday#y20@x mid-instance
+- lastEnd yearly-20th-monday#y20@x mid-instance
+- RRule.expand yearly-20th-monday#y20@x mid-instance
+- expand yearly-two-months#y2m@x first-year
+- lastEnd yearly-two-months#y2m@x first-year
+- RRule.expand yearly-two-months#y2m@x first-year
+- expand yearly-two-months#y2m@x later
+- lastEnd yearly-two-months#y2m@x later
+- RRule.expand yearly-two-months#y2m@x later
+- expand yearly-two-months#y2m@x from-auckland
+- lastEnd yearly-two-months#y2m@x from-auckland
+- RRule.expand yearly-two-months#y2m@x from-auckland
+- expand yearly-two-months#y2m@x mid-instance
+- lastEnd yearly-two-months#y2m@x mid-instance
+- RRule.expand yearly-two-months#y2m@x mid-instance
+- expand allday-weekly-with-override-and-cancel#adw@x first-year
+- lastEnd allday-weekly-with-override-and-cancel#adw@x first-year
+- expand allday-weekly-with-override-and-cancel#adw@x later
+- lastEnd allday-weekly-with-override-and-cancel#adw@x later
+- expand allday-weekly-with-override-and-cancel#adw@x from-auckland
+- lastEnd allday-weekly-with-override-and-cancel#adw@x from-auckland
+- expand allday-weekly-with-override-and-cancel#adw@x mid-instance
+- lastEnd allday-weekly-with-override-and-cancel#adw@x mid-instance
+- expand allday-weekly-with-override-and-cancel#adw@x override-alone D20260309
+- lastEnd allday-weekly-with-override-and-cancel#adw@x override-alone D20260309
+- expand allday-weekly-with-override-and-cancel#adw@x override-alone D20260323
+- lastEnd allday-weekly-with-override-and-cancel#adw@x override-alone D20260323
+- expand override-moved-out-of-its-week#mov@x first-year
+- lastEnd override-moved-out-of-its-week#mov@x first-year
+- expand override-moved-out-of-its-week#mov@x later
+- lastEnd override-moved-out-of-its-week#mov@x later
+- expand override-moved-out-of-its-week#mov@x from-auckland
+- lastEnd override-moved-out-of-its-week#mov@x from-auckland
+- expand override-moved-out-of-its-week#mov@x mid-instance
+- lastEnd override-moved-out-of-its-week#mov@x mid-instance
+- expand override-moved-out-of-its-week#mov@x override-alone T1769022000
+- lastEnd override-moved-out-of-its-week#mov@x override-alone T1769022000
+- expand this-and-future#taf@x first-year
+- lastEnd this-and-future#taf@x first-year
+- expand this-and-future#taf@x later
+- lastEnd this-and-future#taf@x later
+- expand this-and-future#taf@x from-auckland
+- lastEnd this-and-future#taf@x from-auckland
+- expand this-and-future#taf@x mid-instance
+- lastEnd this-and-future#taf@x mid-instance
+- expand this-and-future#taf@x override-alone T1770019200
+- lastEnd this-and-future#taf@x override-alone T1770019200
+- expand floating#flt@x first-year
+- lastEnd floating#flt@x first-year
+- expand floating#flt@x later
+- lastEnd floating#flt@x later
+- expand floating#flt@x from-auckland
+- lastEnd floating#flt@x from-auckland
+- expand floating#flt@x mid-instance
+- lastEnd floating#flt@x mid-instance
+- expand utc-monthly-last-weekday#utc@x first-year
+- lastEnd utc-monthly-last-weekday#utc@x first-year
+- RRule.expand utc-monthly-last-weekday#utc@x first-year
+- expand utc-monthly-last-weekday#utc@x later
+- lastEnd utc-monthly-last-weekday#utc@x later
+- RRule.expand utc-monthly-last-weekday#utc@x later
+- expand utc-monthly-last-weekday#utc@x from-auckland
+- lastEnd utc-monthly-last-weekday#utc@x from-auckland
+- RRule.expand utc-monthly-last-weekday#utc@x from-auckland
+- expand utc-monthly-last-weekday#utc@x mid-instance
+- lastEnd utc-monthly-last-weekday#utc@x mid-instance
+- RRule.expand utc-monthly-last-weekday#utc@x mid-instance
+- expand fixed-offset#fix@x first-year
+- lastEnd fixed-offset#fix@x first-year
+- RRule.expand fixed-offset#fix@x first-year
+- expand fixed-offset#fix@x later
+- lastEnd fixed-offset#fix@x later
+- RRule.expand fixed-offset#fix@x later
+- expand fixed-offset#fix@x from-auckland
+- lastEnd fixed-offset#fix@x from-auckland
+- RRule.expand fixed-offset#fix@x from-auckland
+- expand fixed-offset#fix@x mid-instance
+- lastEnd fixed-offset#fix@x mid-instance
+- RRule.expand fixed-offset#fix@x mid-instance
+- expand long-event-overlapping-range#long@x first-year
+- lastEnd long-event-overlapping-range#long@x first-year
+- RRule.expand long-event-overlapping-range#long@x first-year
+- expand long-event-overlapping-range#long@x later
+- lastEnd long-event-overlapping-range#long@x later
+- RRule.expand long-event-overlapping-range#long@x later
+- expand long-event-overlapping-range#long@x from-auckland
+- lastEnd long-event-overlapping-range#long@x from-auckland
+- RRule.expand long-event-overlapping-range#long@x from-auckland
+- expand long-event-overlapping-range#long@x mid-instance
+- lastEnd long-event-overlapping-range#long@x mid-instance
+- RRule.expand long-event-overlapping-range#long@x mid-instance
+- expand rdate-only#rd@x first-year
+- lastEnd rdate-only#rd@x first-year
+- expand rdate-only#rd@x later
+- lastEnd rdate-only#rd@x later
+- expand rdate-only#rd@x from-auckland
+- lastEnd rdate-only#rd@x from-auckland
+- expand rdate-only#rd@x mid-instance
+- lastEnd rdate-only#rd@x mid-instance
+- expand single-cancelled#can@x first-year
+- lastEnd single-cancelled#can@x first-year
+- unfold joins CRLF, CR and LF continuations
+- unfold treats a bare CR as a line break
+- unfold drops a BOM
+- a content line's value starts at the first colon outside quotes
+- parameter names are upper-cased and values keep their case
+- parameter value lists split on commas
+- a line without a colon is not a content line
+- a URL value keeps its colons
+- VALUE=DATE is all-day
+- an 8-digit value is all-day
+- a trailing Z is UTC
+- a TZID value is zoned
+- a value without zone is floating
+- a floating value takes the fallback zone
+- malformed date-times are refused with one warning each
+- a leap second reads as :59
+- durations parse
+- RRULE weekly with UNTIL and WKST
+- RRULE monthly ordinal with INTERVAL
+- RRULE negative ordinal
+- RRULE negative month day
+- RRULE COUNT
+- RRULE UNTIL as a date
+- RRULE floating UNTIL is anchored to the DTSTART zone
+- RRULE reports BYHOUR and BYMINUTE
+- RRULE reports a sub-daily FREQ
+- RRULE reports BYSETPOS=2
+- RRULE accepts BYSETPOS=-1
+- RRULE reports BYWEEKNO
+- RRULE reports BYYEARDAY
+- RRULE reports a WEEKLY ordinal
+- RRULE reports BYMONTHDAY with WEEKLY
+- RRULE reports a bad BYDAY
+- RRULE reports RSCALE and SKIP
+- RRULE without FREQ is none
+- RRule.parse reports a missing FREQ
+- Google REQUEST: method, no warnings, VTIMEZONE offset
+- Google REQUEST: header fields
+- Google REQUEST: description is unescaped
+- Google REQUEST: start, end, duration
+- Google REQUEST: organizer and attendees
+- Google REQUEST: the VEVENT block is kept verbatim with VALARM, without VCALENDAR
+- Google CANCEL: method, status, sequence, same uid and summary, empty location
+- Google CANCEL has the REQUEST's row key
+- Outlook: CRLF input, no warnings, VTIMEZONE offset
+- Outlook: folded uid, summary, sequence
+- Outlook: a quoted Windows TZID maps to America/New_York
+- Outlook: description
+- Outlook: attendees and organizer
+- Apple: no warnings, uid, organizer with accents
+- Apple: attendees
+- Apple: escapes, categories, URL, DTEND listed first
+- all-day: VALUE=DATE start, two-day end
+- all-day: a missing DTEND is one day
+- the end derives from DURATION
+- recurring master: RRULE and EXDATE
+- override: RECURRENCE-ID, start, sequence, summary
+- override and master have different row keys
+- THISANDFUTURE stays on RECURRENCE-ID
+- matrix: daily interval 2 count 5
+- matrix: weekly UNTIL
+- matrix: last day of month
+- matrix: second Tuesday
+- matrix: last Sunday of March
+- matrix: last weekday
+- matrix: BYHOUR is unsupported
+- matrix: HOURLY reads as DAILY, unsupported
+- matrix: warnings
+- matrix: no METHOD
+- a Windows TZID maps to America/Puerto_Rico
+- an unknown TZID falls back to its VTIMEZONE offset
+- an Outlook display-name TZID resolves
+- an unknown zone without VTIMEZONE is floating
+- an unknown zone is warned about
+- a VTIMEZONE STANDARD offset is recorded
+- a missing UID is synthesised deterministically
+- a different summary synthesises a different UID
+- X-WR-CALNAME / X-WR-TIMEZONE are read and other components ignored
+- opts.tz anchors floating times and opts.method fills a missing METHOD
+- an end before the start collapses to zero length
+- malformed input is warned about, not fatal
+- a missing DTSTART falls back to DTSTAMP
+- PERIOD RDATEs are skipped, other RDATE/EXDATE values kept
+- a DATE end on a timed start is coerced to the start's zone
+- a DATE-TIME end on an all-day start is coerced to a date
+- a bare VEVENT parses with a warning
+- empty input has no events
+- the stored VEVENT block is capped at 32 KB on a UTF-8 boundary
+- row key golden: master
+- row key golden: timed override
+- row key golden: all-day override
+- row key: the same slot in another zone hashes the same
+- sha256 of the empty string
+- sha256 of 'abc'
+- calendar parts are picked by MIME type or .ics name, BOM stripped, size capped
+- IANA names in any case, UTC and GMT resolve
+- ICU spellings: Asia/Kolkata reads as Asia/Calcutta, US/Eastern as America/New_York
+- quotes and Outlook prefixes are stripped
+- Windows zone Pacific Standard Time is America/Los_Angeles
+- Windows zone Mountain Standard Time is America/Denver
+- Windows zone Central Standard Time is America/Chicago
+- Windows zone Eastern Standard Time is America/New_York
+- Windows zone SA Western Standard Time is America/Puerto_Rico
+- Windows zone Atlantic Standard Time is America/Halifax
+- Windows zone GMT Standard Time is Europe/London
+- Windows zone W. Europe Standard Time is Europe/Berlin
+- Windows zone Romance Standard Time is Europe/Paris
+- Windows zone Central Europe Standard Time is Europe/Budapest
+- Windows zone Central European Standard Time is Europe/Warsaw
+- Windows zone E. Europe Standard Time is Europe/Bucharest
+- Windows zone Russian Standard Time is Europe/Moscow
+- Windows zone India Standard Time is Asia/Kolkata
+- Windows zone China Standard Time is Asia/Shanghai
+- Windows zone Tokyo Standard Time is Asia/Tokyo
+- Windows zone Singapore Standard Time is Asia/Singapore
+- Windows zone AUS Eastern Standard Time is Australia/Sydney
+- Windows zone New Zealand Standard Time is Pacific/Auckland
+- Windows zone Hawaiian Standard Time is Pacific/Honolulu
+- Windows zone Alaskan Standard Time is America/Anchorage
+- Windows zone US Mountain Standard Time is America/Phoenix
+- Windows zone Israel Standard Time is Asia/Jerusalem
+- Windows zone Arabian Standard Time is Asia/Dubai
+- Windows zone UTC is UTC
+- every Windows table target is a known zone
+- path-style ids, spaces, VTIMEZONE fallbacks and prefix offsets
+- wall clock to UTC across the Los Angeles DST change
+- instants format as wall clock
+- wall clock round-trips in seven zones
+- offsets are exact on a transition day
+- a 9:00 weekly meeting stays at 9:00 local across DST
+- its instances are 30 minutes, plain, at 09:00 LA
+- date keys follow the event zone
+- the slot of an instance is its RECURRENCE-ID
+- date keys follow opts.tz
+- Puerto Rico keeps one UTC time all year
+- matrix: daily interval 2 count 5
+- matrix: weekly MO,WE until the end of January
+- matrix: last day of the month
+- matrix: second Tuesday at noon Chicago
+- matrix: last Sunday of March
+- matrix: last working day
+- matrix: unsupported-byhour degrades to its first instance
+- matrix: unsupported-hourly degrades to its first instance
+- EXDATE removes a slot and an override replaces another
+- the moved instance reports its original slot
+- an override handed in as the record is a single occurrence
+- overrides for another uid are ignored
+- a cancelled override removes its slot
+- a cancelled series flags every occurrence
+- a THISANDFUTURE override degrades to the first instance
+- an override moved into the range shows
+- the slot it left is gone
+- an override moved out of the range hides its slot
+- a floating RECURRENCE-ID matches a zoned master
+- RDATEs merge and dedupe
+- all-day COUNT with EXDATEs (date and date-time) counts the excluded slots
+- an RDATE alone makes a record recurring
+- unbounded rules fast-forward
+- a biweekly rule from 2000 keeps its phase
+- a five-monthly rule from 2000 keeps its phase
+- COUNT counts from DTSTART
+- maxInstances caps the walk
+- a rule that produces nothing does not loop
+- range edges: partial overlap counts, the end is exclusive
+- a zero-length event at the range start counts
+- a two-day all-day event overlaps its second day
+- floating events recur in their own wall clock
+- fixed-offset events recur in their own wall clock
+- RFC 5545 WKST=MO example
+- RFC 5545 WKST=SU example
+- yearly 20th Monday
+- monthly on the 31st skips short months (all-day DTSTART)
+- yearly leap day
+- Friday the 13th
+- UNTIL as a date is inclusive
+- UNTIL with Z on an instance is inclusive
+- BYSETPOS=-1: the last Friday, 17:00 London across BST
+- BYSETPOS=-1: last end
+- COUNT with EXDATE: the excluded slot still counts
+- COUNT with EXDATE: last end ignores EXDATEs, as the JS does
+- firstStart and ridKey
+- lastOccurrenceEnd: single
+- lastOccurrenceEnd: all-day
+- lastOccurrenceEnd: COUNT
+- lastOccurrenceEnd: UNTIL
+- lastOccurrenceEnd: unbounded
+- lastOccurrenceEnd: complex without UNTIL
+- lastOccurrenceEnd: beyond the horizon
+- lastOccurrenceEnd: within the horizon
+- lastOccurrenceEnd: capped
+- lastOccurrenceEnd: COUNT=100
+- lastOccurrenceEnd: with an RDATE
+- lastOccurrenceEnd: complex with UNTIL
+- lastOccurrenceEnd: an override
+- expiry: unbounded keeps two years
+- expiry: complex keeps two years
+- expiry: at least 90 days
+- expiry: 30 days after the end
+- expiry: 90 days from a late receipt
+- RRULE round-trips FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20260131T225959Z;WKST=SU
+- RRULE round-trips FREQ=MONTHLY;INTERVAL=3;BYDAY=2TU
+- RRULE round-trips FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+- RRULE round-trips FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=7
+- RRULE round-trips FREQ=DAILY;COUNT=5;INTERVAL=2
+- RRULE round-trips FREQ=DAILY;UNTIL=20260131
+- RRULE round-trips FREQ=MONTHLY;BYMONTHDAY=-1,15
+- RRULE round-trips FREQ=YEARLY;BYMONTH=4,10;BYMONTHDAY=10;UNTIL=20281231T000000Z
+- RRULE round-trips FREQ=DAILY;BYHOUR=9,17;BYMINUTE=0
+- RRULE round-trips FREQ=HOURLY;INTERVAL=3
+- RRULE round-trips FREQ=MONTHLY;BYDAY=MO;BYSETPOS=2
+- RRULE round-trips FREQ=WEEKLY;BYDAY=2MO
+- RRULE round-trips FREQ=WEEKLY;BYMONTHDAY=1
+
+## junk-test
+
+`lean/test`, run as `lake build junk-test && ./.lake/build/bin/junk-test`; 117 checks.
+
+- the vectors are for this check's version
+- phishing reports go where the JavaScript sends them
+- every reason's text is the JavaScript's
+- every verdict's text is the JavaScript's
+- site of mail.example.co.uk is example.co.uk
+- site of a.b.example.com is example.com
+- site of example.com is example.com
+- site of 192.0.2.1 is 192.0.2.1
+- site of x.y.z.gov.uk is z.gov.uk
+- site of www.paypal.com. is paypal.com
+- site of localhost is localhost
+- junkcheck-vectors.json has cases
+- vector clean: clean []
+- vector clean-newsletter-tracked-links: clean []
+- vector clean-own-redirector: clean []
+- vector clean-file-named-link: clean []
+- vector clean-brand-from-brand: clean []
+- vector clean-brand-subdomain: clean []
+- vector clean-group-rewrite: clean []
+- vector clean-mail-com-is-not-gmail: clean []
+- vector clean-person-named-chase: clean []
+- vector clean-own-domain-passing: clean []
+- vector clean-no-auth-header-own-domain: clean []
+- vector clean-envelope-auth-empty: clean []
+- vector dmarc-fail: phishing [dmarc_fail, spf_fail]
+- vector forged-pass-below-receiver: suspicious [dmarc_fail]
+- vector envelope-auth-fallback: phishing [dmarc_fail, spf_fail, dkim_fail]
+- vector own-domain-spoofed: phishing [own_domain_unverified]
+- vector own-subdomain-spoofed: phishing [own_domain_unverified]
+- vector name-shows-other-address: phishing [name_has_other_address, brand_mismatch]
+- vector brand-in-name: suspicious [brand_mismatch]
+- vector brand-lookalike-digit: phishing [lookalike_domain]
+- vector brand-lookalike-rn: phishing [lookalike_domain]
+- vector brand-lookalike-extra-letter: suspicious [lookalike_domain]
+- vector own-lookalike: phishing [lookalike_domain]
+- vector punycode-sender: phishing [brand_mismatch, punycode_sender]
+- vector reply-to-elsewhere: clean [reply_to_elsewhere]
+- vector reply-to-same-site: clean []
+- vector link-text-mismatch: suspicious [link_text_mismatch]
+- vector link-entities-and-quotes: suspicious [link_text_mismatch]
+- vector link-userinfo: phishing [link_userinfo, link_to_ip]
+- vector link-ip: suspicious [link_to_ip]
+- vector link-punycode: suspicious [link_punycode]
+- vector risky-attachment: suspicious [risky_attachment]
+- vector page-attachment-and-lure: phishing [page_attachment, credential_lure]
+- vector credential-lure-with-link: suspicious [credential_lure]
+- vector credential-lure-no-link: clean []
+- vector wallet-phish-brand-in-subject: phishing [brand_in_subject, credential_lure]
+- vector host-phish-brand-in-subject: phishing [brand_in_subject, credential_lure]
+- vector brand-in-subject-no-lure: clean []
+- vector brand-in-subject-from-brand: suspicious [credential_lure]
+- vector brand-in-name-and-subject: phishing [brand_mismatch, credential_lure]
+- vector brand-in-subject-forwarded: suspicious [credential_lure]
+- vector brand-in-subject-case-unkept: phishing [brand_in_subject, credential_lure]
+- vector classic-phish: phishing [dmarc_fail, spf_fail, brand_mismatch, link_text_mismatch, credential_lure]
+- vector gmail-spam-label: spam [gmail_spam]
+- vector upstream-spam-flag: spam [upstream_spam]
+- vector spam-phrases: spam [spam_phrases, shouting_subject]
+- vector bulk-no-unsubscribe: clean [bulk_no_unsubscribe]
+- vector html-only-body-words: suspicious [spam_phrases]
+- eml 01 as it came (CRLF) is clean
+- eml 02 as it came (CRLF) is clean
+- eml 03 as it came (CRLF) is clean
+- eml 04 as it came (CRLF) is clean
+- eml 05 as it came (CRLF) is clean
+- eml 06 as it came (CRLF) is clean
+- eml 07 as it came (CRLF) is clean
+- eml 08 as it came (CRLF) is clean
+- eml 09 as it came (CRLF) is clean
+- eml 10 as it came (CRLF) is clean
+- eml 12 as it came (CRLF) is clean
+- eml 13 as it came (CRLF) is clean
+- eml 14 as it came (CRLF) is clean
+- eml 14b as it came (CRLF) is clean
+- eml 11 (a list with no List-Unsubscribe) is bulk mail with no way out
+- inputOfMessage reads 02's sender, subject, unsubscribe and header block
+- inputOfMessage reads 13's attachment name and type
+- 02 with DMARC, SPF and DKIM failed at the receiver is phishing
+- 02 with a forged pass below the receiver's fail still fails DMARC
+- 02 passing at the receiver is clean
+- 09 from our own domain with nothing passing is phishing
+- 09 from our own domain with no Authentication-Results is clean
+- 04 whose name shows another address (and a brand) is phishing
+- 04 whose name is a brand it is not from is suspicious
+- 10 asking to verify a Coinbase account from kraken.example names a brand in the subject
+- 10 forwarded with that subject is not caught by the brand rule
+- 04 from paypa1.com is a look-alike (swapped characters)
+- 04 from wu1i.nu looks like our own domain
+- 04 from amazoon.com is one letter from a brand
+- 04 from a punycode domain is written in look-alike characters
+- 01 with Reply-To elsewhere says so
+- 01 with Reply-To on its own site is clean
+- 10 with a link that shows paypal.com and goes elsewhere is a mismatch
+- 10 with a link hiding behind userinfo to a bare address
+- 10 with a link to an IPv6 literal goes to a bare address
+- 10 with a punycode link
+- 10 with a tracked newsletter link is clean
+- 13 with its PDF renamed to an .exe runs a program
+- 13 with an .htm attachment and a mailbox-full subject is phishing
+- 10 with unusual sign-in activity and a link is a credential lure
+- 10 with unusual sign-in activity and no link is clean
+- 09 in Gmail's Spam is spam
+- 09 flagged by a filter on the way is spam
+- 09 with X-Spam-Status yes is spam
+- 09 shouting about a lottery is spam
+- 02 without its List-Unsubscribe (Precedence: bulk) has no way out
+- 09 with a shouting subject alone
+- lower-casing İ lengthens the string, as in JavaScript
+- the Kelvin sign lower-cases to k
+- &#NNNNN; wraps at 65536 like String.fromCharCode
+- &amp;lt; decodes once, to &lt;
+- a tag never closed stays as text
+- data-href counts as href (\b before href)
+- a quoted href runs to the next quote, even in the next anchor (as the JavaScript regex does)
+- an unclosed quote falls back to the unquoted value, which is no link
+- pick reads spf=softfail as softfail
+- header.d= is not dkim=
+
+## server-test
+
+`lean/test`, run as `lake build server-test && ./.lake/build/bin/server-test`; 393 checks.
+
+- sha256 of 'abc' matches the FIPS vector
+- hmac-sha256 matches RFC 4231 test case 2
+- base64url encodes without padding
+- random bytes are 32 long and differ between calls
+- constant-time equality agrees with structural equality
+- sqlite reports its version
+- the schema migrates to the current version
+- migrating again is a no-op
+- fts5 is compiled in
+- a bound insert reads back by name
+- fts5 matches a quoted address domain with the custom tokenizer
+- fts5 rejects an unquoted term containing a dot, so the query builder must quote
+- fts5 matches a subject word case-insensitively
+- a blob round-trips byte for byte
+- a failed transaction rolls back
+- sigv4 canonical request matches the AWS example
+- sigv4 string to sign has the AWS scope
+- sigv4 signature matches the AWS example
+- sigv4 encodes the list query canonically
+- amz date formats epoch ms in UTC
+- r2 list reads keys out of the XML
+- a term with a quote yields only balanced, quoted words
+- from: an address is column-scoped and quoted
+- a bare negation has no MATCH of its own but a NOT IN string
+- a term and a negation become AND NOT
+- an exact phrase is one quoted string
+- has:attachment is a filter, not text
+- before: is the start of the following UTC day
+- an impossible date stays as free text
+- short terms are exact, long ones prefix
+- the tokenizer keeps an address whole and adds its parts
+- the spool drains every fixture (15)
+- draining consumes the markers and keeps the raw objects
+- a second drain is a no-op
+- every message has a message_text row
+- the spool ulid becomes the message id, with raw_key and parsed headers
+- attachment metadata is stored and flags the message
+- a text/calendar part marks an invite
+- re-ingesting the same raw is a duplicate, recorded, with the rcpt merged
+- a reused Message-ID with different content is a new message
+- an FTS word from one subject finds exactly that message
+- a bare term prefix-matches case-insensitively
+- from:<sender domain> finds the sender's message
+- -word excludes a message alongside a term
+- -word alone excludes only the matching message
+- a phrase matches the body
+- before: includes the named day and excludes later mail
+- after: starts at the named day
+- text and a has: filter combine
+- a dotted domain as a bare term is found through its parts
+- a hyphenated word in a subject is found
+- to: matches a recipient domain
+- subject: with a quoted phrase
+- hostile input does not break the MATCH
+- a reply joins its parent's thread by In-Reply-To
+- the thread counts both messages
+- a normalized subject within 7 days joins the thread
+- subject normalization strips reply prefixes
+- an /api request without x-account-id is refused
+- an /api request for another account is refused
+- the list cursor pages the inbox newest first (17 in 5 pages)
+- GET /api/msg/:id returns the full record
+- GET /api/msg/:id/html serves the HTML part under a strict CSP
+- a message without HTML gives 404 for /html
+- an attachment downloads with its type and a safe filename
+- filenames are sanitised
+- GET /api/msg/:id/raw returns the bytes as message/rfc822
+- GET /api/thread/:id lists the thread oldest first
+- GET /api/search answers in the list shape
+- POST /api/import stores the raw first and keeps the id, rcpts, archive and forever
+- importing the same id again is a duplicate
+- POST /internal/wake drains new markers, dropping one whose raw is missing
+- a message over 8 MiB is stored from its headers, truncated, snippet from subject
+- a session token is v1.<acct>.<sid>.<exp>.<epoch>.<mac> and verifies
+- the MAC is base64url HMAC-SHA256 of everything before the last dot
+- a tampered MAC is rejected
+- a changed payload is rejected
+- another account's token is rejected
+- an expired token is rejected
+- a token under another secret is rejected
+- an API token is lm1.<acct>.<rand>.<mac> and verifies
+- a magic link verifies as a link, not as a session or an API token
+- behind a Worker a request without x-account-id is refused
+- without the dev bypass x-account-id alone is not a session
+- an internal route without X-Internal-Secret is refused
+- a wrong internal secret is refused
+- provisioning creates the account once and mails one welcome link
+- a magic link for an unknown email is 202 and sends nothing
+- a magic link for the account's email sends one mail with the link and the code
+- the mail has RFC 5322 headers and a ULID Message-ID
+- a link with a bad MAC does not sign in
+- GET /auth/magic redirects to / with an HttpOnly Secure Lax session cookie
+- a magic link works once
+- the session cookie authorizes GET /api/account
+- a session also satisfies a token route
+- a cookie mutation without X-Requested-With, or from another Origin, is 403
+- PATCH /api/account with Origin and X-Requested-With updates the profile
+- a bad retention_days is 400
+- a session seen over an hour ago slides and gets a fresh cookie
+- POST /api/tokens returns an lm1 token once
+- a read token reads, may not act, and is no session
+- a tampered bearer token is 401
+- GET /api/tokens lists the token without the secret
+- a revoked API token stops working
+- POST /auth/code with the right code yields an lm1 token that reads mail
+- a code works once
+- five wrong codes burn the link: the right code and the link then fail
+- GET /api/sessions lists the current session
+- a cookie logout without the CSRF headers is 403
+- logout clears the cookie and revokes the session
+- DELETE /api/sessions/:id revokes another session
+- logout-everywhere bumps the epoch: old cookies fail, new ones work
+- a request stamped for another account is 403
+- operator routes do not exist in an account container
+- cookies drop Secure on an http origin
+- the dev bypass is refused off localhost
+- with no internal secret internal routes are open only on localhost
+- a sign-up is 202 and leaves a pending account and a signup row
+- a sign-up from ADMIN_EMAILS is approved at once as an admin
+- /admin/* refuses a non-admin account and a missing internal secret
+- GET /admin/signups lists the pending sign-up
+- approve activates, projects the account to /internal/accounts and wakes it with a provision
+- approval is audited with the admin as actor
+- signing up again once active is a silent 202
+- reject records the decision and drops the pending account
+- domain grants are stored, projected, and not given to two accounts
+- GET /admin/accounts lists domains; disable projects the disabled status
+- SIGNUP_MODE=closed answers 404
+- SIGNUP_MODE=open approves at once, projects and provisions
+- sign-ups are limited to 10 an hour per IP
+- the dev bypass is an admin on a bare operator
+- the HTML builder escapes text and attributes and leaves void elements open
+- /inbox lists the fixture subjects with links, under <title>LeanMail · Inbox</title>
+- /inbox escapes a <script> subject
+- /inbox has the filter tabs, the search box and the account menu
+- / redirects to /inbox
+- /m/<id> shows the headers and the attachment download link
+- /m/<id> with an HTML part shows it only in a sandboxed iframe
+- ?view=text shows the stored text instead
+- an unknown message is the HTML 404 page
+- the Done form sets archived_at, redirects, and moves the message from Inbox to Done
+- snooze sets snoozed_until in the future and lists the message under Snoozed
+- next week is a Monday 08:00 UTC after now
+- PATCH /api/msg/:id applies an action and answers the list item; bad ones are 400/404
+- keep forever clears expires_at
+- /search?q=matte lists exactly one message
+- /settings shows the profile, sessions and tokens sections and the sign-out buttons
+- the profile form saves through the account PATCH logic and re-renders an error
+- creating a token shows it once on the settings page
+- /admin/signups is a shell for a navigation and a JSON 404 for the script in an account container
+- /signin is public and posts to /signin on a bare run
+- behind a Worker the sign-in form posts to /auth/login
+- /static/app.css and app.js are served with their types and an hour of caching; others are 404
+- every HTML page carries the CSP, Referrer-Policy and nosniff (9 pages)
+- without a session /inbox redirects a browser to /signin (302), and other clients get 401
+- a cookie form post needs Origin = PUBLIC_ORIGIN or Sec-Fetch-Site: same-origin
+- the session cookie opens /inbox
+- POST /signin mails the account's address only and always shows the code form
+- the 6-digit code form signs the browser in with a session cookie
+- sign out clears the cookie and the session
+- rfc822: a text-only message round-trips through Core.Mime.parse
+- rfc822: text only is text/plain quoted-printable with CRLF and the RFC 5322 headers
+- rfc822: text and HTML are a multipart/alternative that round-trips
+- rfc822: two attachments (one non-ASCII name), a non-ASCII subject and name round-trip
+- rfc822: multipart/mixed wraps the alternative; RFC 2047 and RFC 2231 are used; lines fold at 78
+- quoted-printable: = is escaped, a trailing space is =20, long lines break softly at ≤ 76
+- POST /api/send stores the Sent copy (sending) before the Worker call and sends the wire copy
+- the wire raw parses with the right headers, our Message-ID, and no Bcc
+- the Sent row has source sent, folder sent, send_status sent, the client_id, and its raw (with Bcc)
+- sending again with the same client_id answers the same message and sends nothing
+- a failed Worker call leaves send_status failed with send_error
+- a retry of a failed client_id sends again and tombstones the failed copy
+- caps: 21 recipients is 400, 11 attachments is 400, over 3 MiB of attachments is 413
+- reply_of sets In-Reply-To and References from the parent and threads the Sent copy with it
+- an unsendable from is 403; a sending domain, a can_send address and default_from are allowed
+- PUT /api/drafts/:id creates at revision 1 with a send_id; a repeated mutation_id is idempotent
+- draft CAS: a stale or missing revision is 409 {error:revision, revision}; the right one bumps it
+- GET /api/drafts lists the draft; GET /api/drafts/:id has its content and attachment data
+- sending a draft uses its send_id as client_id and marks the draft sent
+- sending the same draft revision again is idempotent
+- /api/send with a draft_id at the wrong revision is 409; DELETE removes the draft
+- /compose?reply=<id>&all=1 prefills To, Cc without our own address, Re: subject and the quote
+- /compose?forward=<id> has Fwd: and the forward_of reference
+- the multipart form parser reads fields and a file, keeping the file's bytes
+- POST /compose/send (multipart) sends and redirects to the Sent copy with a flash
+- the message page has Reply links and the sent flash
+- /compose/save stores a draft and reopens it; /drafts lists it
+- the Sent tab and /api/msgs?folder=sent list sent mail; the inbox does not
+- the 201st send of the UTC day is 429
+- r2 custom metadata goes out as x-amz-meta-<lower-case key>
+- r2 custom metadata is read back from x-amz-meta-* headers only, any case
+- r2 metadata survives the header round trip
+- the spool drains the four metadata markers
+- spool metadata: rcpts merge with rcpt, source, received_at, archive, snooze, to-read and never expiry
+- spool metadata: junk_kind files it as junk (junk_at set) and a numeric expires_at is kept
+- spool metadata: folder sent and a one-entry rcpts list
+- spool metadata: the Worker's keys alone keep the defaults (inbox, route, retention expiry)
+- a spooled archived message is in Archived, not the inbox; junk is in Junk; route mail is in the inbox
+- POST /api/import keeps x-snoozed-until, x-to-read-at and x-junk-kind (junk_at set)
+- an import without state headers is inbox mail with no snooze, to-read or junk
+- only new route/gmail mail pushes: never an import, a Sent copy or junk
+- no push reaches the Worker for imported mail
+- a drain of 50 markers, 8 at a time, stores all 50 and consumes every marker
+- gmail: nothing connected means no X-Next-Wake
+- gmail: a client id that is not Google's is refused; a good one is stored
+- gmail: authorize is a 302 to Google with offline access, consent, the scopes and our redirect
+- gmail: the state is v1.<acct>.goauth.<nonce>.<exp>.<mac> and round-trips
+- gmail: the state is not a magic link or a session, and fails tampered, expired or for another account
+- gmail: a callback with a forged state is sent back with error=state
+- gmail: the callback exchanges the code, stores the refresh token and the mailbox, and redirects
+- gmail: a state is single use
+- gmail: send-as identities are the mailbox and its verified aliases
+- gmail: a connection without a watch wakes every 300 s
+- gmail: GET /api/gmail reports the connection and the Worker hook URL
+- gmail: the poll ingests the two new messages from history.list and messages.get
+- gmail: a message without INBOX is stored done; one with it is not
+- gmail: the raw message is in the store under raw/<acct>/<id>
+- gmail: the cursor moves to the mailbox's history id
+- gmail: a repeat is a duplicate by gm_msgid, without fetching it again
+- gmail: a 404 history is a gap: messages.list since a day before, missing ones taken, cursor reset
+- gmail: a message the poll cannot fetch goes to history_failures and the cursor still moves
+- gmail: its retry, once due, stores it and clears the record
+- gmail: a leased lane does not run twice at once; the lease is freed and the error recorded
+- gmail: POST /api/gmail/backfill starts a job with the mailbox's count; a second is 409
+- gmail: a running backfill wakes every 60 s
+- gmail: responses carry X-Next-Wake
+- gmail: a step commits the first page and stops on Google's 500 without committing the second
+- gmail: while another run holds the lease the step is skipped
+- gmail: once the lease expires the step resumes at the page token and finishes
+- gmail: backfilled mail is an import that expires from the backfill's start; Sent mail lands in Sent
+- gmail: a refused grant (invalid_grant) pauses the backfill and marks the connection
+- gmail: GET /api/gmail/backfill reports it
+- gmail: resume and cancel
+- gmail: marking a Gmail message done queues the mirror and kicks the job loop
+- gmail: the mirror lane takes INBOX off it in Gmail
+- gmail: undo queues the restore
+- gmail: the lane puts INBOX back
+- gmail: mail not in Gmail's inbox is skipped, never modified
+- gmail: with the switch off nothing is queued
+- gmail: reporting junk queues a spam report and sets junk_gmail
+- gmail: the spam lane marks it spam in Gmail and takes it out of the inbox
+- gmail: not junk takes SPAM off and puts INBOX back
+- gmail: mail from the Gmail address is sent with users.messages.send, not the Worker
+- gmail: the Gmail send carries the Bcc and the original's Gmail thread
+- gmail: the Sent copy gets the returned Gmail id
+- gmail: an alias Gmail verified is sendable, a pending one is not
+- gmail: POST /api/gmail/watch calls users.watch with the topic and stores the expiry
+- gmail: an active watch wakes every 1800 s
+- gmail: the daily renewal waits until two days before expiry
+- gmail: /internal/gmail/push needs the internal secret, ignores another mailbox, and runs the poll
+- gmail: POST /internal/tick runs the lanes (daily adds the renewal and pruning)
+- gmail: /settings/gmail shows the connection, the backfill and the switches
+- gmail: the switches form saves (an unticked box is off)
+- gmail: DELETE /api/gmail stops the watch and forgets the connection
+- dev bypass: GET /api/account on a bare server is the synthetic dev account
+- dev bypass: /api/send without from sends as dev@localhost
+- GET /api/account accepts a read token
+- Db.execCount answers the rows its own statement changed
+- calendar: an invite at ingest is one events row keyed by row_key, with an expiry, and marks has_invite
+- calendar: a higher SEQUENCE updates the same row; a stale one is ignored
+- calendar: a CANCEL marks the row cancelled and keeps its record
+- calendar: an iTIP REPLY makes no event
+- GET /api/events expands a weekly COUNT=4 series in the window, with its moved instance
+- GET /api/events: nothing of a finished series outside the window
+- GET /api/events: a cancelled event shows as cancelled
+- POST /api/events makes a manual event; PUT replaces it with a higher SEQUENCE; a title is required
+- PATCH /api/events/:id keeps the RSVP and notes as an override, merged into the occurrences
+- the RSVP form updates the override and goes back
+- a hidden event leaves the occurrences unless asked for
+- POST /api/events/batch keeps the sequence guard (an older copy is ignored)
+- DELETE /api/events/:id soft-deletes
+- the message page shows the invite block: summary, when, where, organizer, RSVP
+- an invite with RSVP buttons posts to the event's rsvp form
+- /calendar?month= shows the month grid with the occurrences, linking to each event
+- /calendar/:id shows the event, its message and the answer
+- junk: a phishing message gets its verdict stored and lands in Junk as phishing
+- junk: the phishing message is out of the inbox and in the Junk list
+- junk: a clean message keeps its verdict and stays in the inbox
+- junk: an import is checked but not re-filed (the old vault already decided)
+- the message page shows the verdict's reasons in words and the junk row
+- POST /api/blocks keeps the one spelling; one of the vault's own domains is refused
+- a blocked sender's next mail is stored as junk_kind 'blocked' and counts a hit
+- not-junk takes it out of Junk, back to the inbox, and lifts the sender's block
+- report {kind, block: domain} files it in Junk and blocks the domain, subdomains included
+- report refuses an unknown kind
+- GET /api/blocks lists them; DELETE /api/blocks/:id lifts one
+- /settings/blocks lists the blocks and adds one from its form
+- the message page's Block sender blocks the sender and files the message
+- unsubscribe: a one-click list gets the RFC 8058 POST
+- unsubscribe: without one-click the targets come back for the page to show
+- unsubscribe: a private address is never POSTed to
+- routing: adding a domain projects PUT /internal/routes {account_id, routes, replace} with its *@domain row
+- routing: an address row is projected; a forward with nowhere to go, or an unknown domain, is refused
+- routing: changing a domain's default changes its *@domain row
+- GET /api/config and /api/sendable read the routing
+- routing: without CF_API_TOKEN the plan is shown (assumed) and cannot be applied
+- /settings/routing lists domains and addresses and says it cannot apply without the token
+- routing: the plan diffs against Cloudflare: catch-all to this Worker, the vault's old rule deleted, preview off
+- routing: apply refuses a plan that is not the one Cloudflare would now get
+- routing: apply makes the changes through the Cloudflare client, and the next plan is empty
+- /settings/routing?plan=1 shows the plan and the Apply form when the token is set
+- /settings/routing forms add a domain and delete an address, projecting each time
+- routing: deleting a domain drops its row from the projection
+- PUT /api/push/token registers device tokens; a malformed one is refused
+- new mail posts {tokens, payload:{id, from, subject}} to /internal/push; the dead token is pruned
+- an import, and junk, never push
+- DELETE /api/push/token forgets it
+- expire: due mail is soft-deleted with a 7-day purge_after, due events too; the rest stay
+- GET /api/expiring and /expiring list what expires within 7 days, with Keep forever
+- POST /api/msg/expiry {ids, never} keeps forever
+- purge: nothing before the undo window
+- purge: after 7 days the raw object, text and FTS entry go; the row keeps purged_at
+- orphan_gc: deletes old objects no row holds, keeps held, pending and fresh ones, and resets its cursor at the end
+- spool_gc: an old marker whose raw is gone is dropped; one with its raw waiting stays
+- stuck_sends: a send still 'sending' after a day is 'unknown'
+- Jobs.tick runs expire, purge and stuck_sends; daily adds orphan_gc and spool_gc
+- the settings page and the header menu link routing, blocks, Gmail, calendar and expiring
+- /internal/health reports gmail {connected, last_poll_at, last_push_at, watch_expiration} and spool_pending
+- m6b: ingest marks legal mail privileged and leaves the rest
+- m6b: the privilege rules port the old app's phrases and the sender list
+- m6b: the AI's first-object reader skips prose and braces inside strings
+- m6b: MCP initialize answers 2025-06-18, tools, leanmail and instructions
+- m6b: a notification is 202 with no body; ping answers {}
+- m6b: tools/list is the CLI's tool list, with schemas and annotations
+- m6b: a batch is -32600, an unknown method -32601, an unknown tool -32602, bad JSON -32700
+- m6b: GET /mcp is 405; no token 401; a token without read 403; a foreign Origin only matters without a bearer; a bad protocol header 400
+- m6b: search_mail round trip finds the thread and withholds the privileged hit
+- m6b: get_message answers the message without raw_key; a privileged one is {id, withheld}
+- m6b: recent_mail lists the inbox with the privileged entry withheld; a bad filter is an error
+- m6b: account_status reports health, the account and the privileged counts
+- m6b: a read token cannot mark_done (isError, insufficient scope), save_draft or send_draft
+- m6b: an act token marks done and snoozes through the tools
+- m6b: new_draft_ids, save_draft (and its revision conflict), get_draft, list_drafts, delete_draft
+- m6b: every tools/call is in mcp_log with token, tool, ok and ms, and no arguments
+- m6b: /api/tokens, /api/gmail and /api/account read with a read token; backfill controls need act
+- m6b: with the AI off its routes are 404, no ai lane runs, and the settings page says it is not configured
+- m6b: the ai lane triages new mail into ai_triage and skips the privileged message
+- m6b: the AI request is POST {base}/chat/completions, bearer key, temperature 0, system + user
+- m6b: a second tick triages nothing new
+- m6b: the list item carries triage {label, priority}; untriaged mail has none
+- m6b: the inbox renders the triage chip
+- m6b: a thread summary is {summary, model, at}, cached: the second call makes no AI request
+- m6b: ?refresh=1 asks again; a privileged thread is refused 403 without an AI request
+- m6b: the message page shows the cached summary and the button; a privileged one says why not
+- m6b: a draft suggestion returns {text} only, saves nothing, needs draft, refuses privileged context
+- m6b: no request to the AI ever carried the privileged message
+- m6b: GET /api/ai says enabled; the settings page shows the model, never the key
+- m6b: switching the pref off makes the AI routes 404 and stops the lane
+- m6b: and back on
+- m6b: listing a sender domain re-marks its mail privileged, drops its AI output, and MCP withholds it
+- m6b: clearing the lists un-marks it again (the built-in words still hold the legal mail)
+- m6b: a failing AI leaves the cursor and records the lane error; the next tick catches up
+- m9b: p256Verify accepts the RFC 6979 A.2.5 P-256/SHA-256 signature of 'sample'
+- m9b: p256Verify refuses another message, a flipped signature byte, another key and malformed input
+- m9b: p256Verify accepts a node-made WebAuthn assertion signature
+- m9b: cbor decodes a map of small unsigned and negative ints
+- m9b: cbor decodes an array of text, bytes, a two-byte uint and a one-byte negative int
+- m9b: cbor reads text keys, an empty map and a byte string (an attestation object's shape)
+- m9b: cbor refuses indefinite lengths, tags, floats, truncation, trailing bytes, lying counts and deep nesting
+- m9b: cbor decodeAt reports where an item ends, so what follows it can be read
+- m9b: cbor encode and decode round-trip a COSE key byte for byte
+- m9b: authData parses the rp id hash, flags, count, AAGUID, credential id and COSE key
+- m9b: authData reads an extensions map after the key when the ED flag is set, and refuses stray bytes
+- m9b: authData refuses a short record and a credential id past the end
+- m9b: an assertion's authData (no attested credential) parses with its count
+- m9b: a COSE key must be EC2, ES256 and P-256 with 32-byte coordinates
+- m9b: the sign count must grow unless it stays 0
+- m9b: registration options carry a stored 32-byte challenge, the rp and user, ES256, no attestation, a resident key
+- m9b: registration refuses another origin and a get assertion's client data
+- m9b: a none-attestation registration is stored with its COSE key, name, transports and backup flag
+- m9b: a registration challenge works once
+- m9b: registration refuses other formats, an attStmt, rawId ≠ credential id, another rp id, no UP, RS256 and an unknown challenge
+- m9b: the options exclude the credentials already registered
+- m9b: a second credential registers; the same credential twice is a 409
+- m9b: a login needs the Worker's voucher for this very challenge under this account's key, and this account's user handle
+- m9b: the voucher is base64url HMAC-SHA256 of "passkey:" + token under the account's secret
+- m9b: a valid assertion starts a session (cookie set), records the count and the time
+- m9b: a sign count that went backwards is refused
+- m9b: a correctly signed assertion for another origin is refused
+- m9b: a correctly signed assertion for another rp id is refused
+- m9b: an expired challenge is refused even with the Worker's voucher
+- m9b: a tampered signature is refused without spending the challenge; the genuine one then works, once
+- m9b: a credential that never counts (0 and 0) logs in, and its assertion cannot be replayed
+- m9b: an unknown credential is refused
+- m9b: GET /api/passkeys lists both with names, transports and last use
+- m9b: /signin has the passkey button above the email form and links to /signup unless sign-ups are closed
+- m9b: /settings lists the passkeys with a remove form each and an add button
+- m9b: removing a passkey from Settings (CSRF-checked) deletes it, and it no longer signs in
+- m9b: DELETE /api/passkeys/:id removes one, then 404s
+- m9b: /signup asks for an email and a note, posting to the Worker's /auth/signup; ?sent=1 thanks, ?error explains
+- m9b: with SIGNUP_MODE=closed the page says so and has no form
+- m9b: the sign-up form posted to the operator queues the sign-up and redirects to the thanks page
+- m9b: an account container takes no sign-ups
+
+## worker
+
+`worker/test`, run as `npm test` (vitest in the Workers pool); 73 tests.
+
+### test/auth.test.ts
+
+- stampHeaders (MailContainer.proxy) › drops client x-account-id, x-internal-secret and every x-admin-*, then sets its own
+- item 1: /internal/email/send from MAIL_FROM › defaults MAIL_FROM to no-reply@<host of PUBLIC_ORIGIN>, as the container does
+- item 1: /internal/email/send from MAIL_FROM › lets any authenticated container send as MAIL_FROM with no route; other From still need one
+- item 3: PUT /internal/accounts replace_domains_for › drops the account's unlisted domains, leaves others' alone, and keeps has_gmail when absent
+- item 4: POST /internal/wake/:acct {provision} › proxies POST /internal/provision to the account and returns its reply; no body is a plain wake
+- item 5: public auth routes › POST /auth/signup goes to the operator with cf-connecting-ip, and nothing client-stamped
+- item 5: public auth routes › POST /auth/login answers 202 to all, asking only an active account's container for a link
+- item 5: public auth routes › POST /auth/login with the no-JS form answers 303 /signin?sent=1 for any email
+- item 5: public auth routes › rate-limits /auth/login and the code routes to 10 an hour per client IP
+- item 5: public auth routes › GET /auth/magic?t= goes to the account its MAC names; a bad link is a 400 page
+- item 5: public auth routes › POST /auth/code and /signin/code go to the email's active account, else the operator
+- item 6: /admin/* › a JSON or script request goes to the operator with the cookie's account; a navigation to the account's shell
+- item 6: /admin/* › without a valid cookie: 401 for JSON, 302 /signin for a navigation; a bearer is not enough
+- item 7 and the page addendum: everything else › signed-out sign-in pages and static files go to the operator; with a cookie, to the account
+- item 7 and the page addendum: everything else › a cookie or bearer reaches its account; signed out, a navigation is sent to /signin and an API call is 401
+- item 7 and the page addendum: everything else › DEV_ACCOUNT still answers signed-out requests on localhost only
+- M9b: passkey login › POST /auth/passkey/challenge mints v1.<rand>.<exp>.<mac> with the rp id; it verifies until it expires
+- M9b: passkey login › a challenge is not a magic link, and a magic link or cookie is not a challenge
+- M9b: passkey login › POST /auth/passkey/login goes to the account userHandle names, with the challenge vouched for under that account's key
+- M9b: passkey login › refuses, without waking a container: unknown, pending and _operator handles, no handle, a bad or expired challenge
+- M9b: the sign-up page › signed out, GET and POST /signup go to the operator; with a cookie, to the account
+- M9b: the sign-up page › the form POST /auth/signup reaches the operator as JSON and answers 303 by the outcome
+
+### test/email.test.ts
+
+- vault › spools raw with metadata, writes the in/ marker, wakes, and logs one content-free decision
+- vault › rejects mail over 25 MiB without reading it
+- vault › the real wake swallows a container failure: the delivery still succeeds
+- drop and forward-only store nothing › drops an explicit drop route and an unknown address
+- drop and forward-only store nothing › forwards each target with a marker header and stores nothing
+- drop and forward-only store nothing › bounces a forward-only address with no deliverable target, and throws when every forward fails
+- vault+forward › stores, then forwards with X-LeanMail-Forwarded: <ulid>@<domain>
+- vault+forward › keeps but does not forward looped or bulk mail
+- vault+forward › a failed forward is logged, not thrown, once the raw is stored
+- vault+forward › stops forwarding (but keeps storing) once the breaker trips
+- loopGuard › flags each store-only signal
+- loopGuard › counts Received hops
+- forward breaker › trips after 300 in an hour and resets after the window
+
+### test/gmail.test.ts
+
+- gmail push hook › signs base64url(HMAC-SHA256(the account's derived internal secret, 'gmail-push:' + acct))
+- gmail push hook › forwards {emailAddress, historyId} to the account's /internal/gmail/push and answers 204
+- gmail push hook › refuses a wrong signature, another account's signature, a missing secret and other methods
+- gmail push hook › acknowledges a signed push with no usable data without waking anything
+- gmail push hook › is routed by the front door before any credential check
+- google oauth callback › routes to the account the state's MAC names
+- google oauth callback › refuses a forged state, a magic-link-shaped token and one signed for another account
+- X-Next-Wake › is whole seconds clamped to a minute .. a day
+
+### test/internal.test.ts
+
+- internal auth › 401s without, or with a wrong, secret, and when INTERNAL_SECRET is unset
+- internal auth › the master secret itself is not a container credential
+- internal auth › a container's secret speaks only for its own account
+- internal auth › the operator's derived secret opens the operator-only routes
+- internal auth › derives base64url(HMAC-SHA256(INTERNAL_SECRET, account)), and the DO never copies the master
+- internal auth › is reached from fetch() over the public origin
+- GET /internal/health › proxies to the named account's container, or DEV_ACCOUNT on localhost, behind that account's secret
+- POST /internal/email/send › sends once per recipient as an address the account may send from
+- POST /internal/email/send › refuses a From the caller does not own or may not send from
+- PUT /internal/routes › accepts routes on the account's own domains
+- PUT /internal/routes › refuses another account's domain, another account's id, and bad input; the operator may do either
+- PUT /internal/accounts and POST /internal/wake/:acct › are operator only
+- tokens › verifyMac round-trips v1 and lm1 tokens and rejects tampering
+- tokens › verifies under the key derived for the account the token names, never the master
+- tokens › the DO's env carries neither master secret
+- tokens › passes the Cloudflare, AI and log settings through when set, and nothing when not
+- tokens › asks for DEV_AUTH_BYPASS only when DEV_ACCOUNT is set
+- tokens › tests run on the vitest bindings, not .dev.vars
+- tokens › accountFromRequest reads the cookie, then the bearer
+- fetch() › serves /health and 401s an unauthenticated non-local request even with DEV_ACCOUNT set
+- scheduled › ticks every active account, at most five at once, logging failures
+- scheduled › mapLimit handles empty input
+
+### test/push.test.ts
+
+- /internal/push › answers {sent:0, dead:[], failed:0} with no tokens, configured or not
+- /internal/push › is 503 with tokens but no APNs key, and 400 on a malformed token
+- /internal/push › sends {id, from, subject} to every device through the APNs transport and returns what it says
+- /internal/push › the real transport signs an ES256 provider token and reports a 410 device as dead
+
+### test/routes.test.ts
+
+- lookupRoute › prefers the exact address, then the +tag-stripped address, then *@domain
+- upserts › upserts routes, and replace removes the account's other rows only
+- upserts › upserts accounts and domains; lists active accounts
+- ulid › is 26 Crockford characters carrying the time
+
+## cli-smoke
+
+`scripts/smoke-cli.sh` (`make cli-smoke`): the `leanmail` CLI against a bare local server; 17 steps, each of which asserts on the output.
+
+- server on http://127.0.0.1:<port>, DATA_DIR=<tmp>
+- login
+- import ./lean/test/fixtures/eml
+- recent
+- search matte
+- show <ulid>
+- attachment of the pdf fixture
+- import again
+- action <ulid> done
+- action <ulid> snooze 1d, then inbox
+- draft new / save / show / send
+- send --from dev@localhost
+- tokens create / list / revoke
+- gmail status
+- mcp --local
+- mcp --proxy against a stub
+- stop server
