@@ -2,7 +2,7 @@ import { MailContainer } from "./container";
 import { handleEmail } from "./email";
 import type { Env } from "./env";
 import { handleAuth, isNavigation, proxyTo, pruneAuthRate, toSignin } from "./auth";
-import { LOCAL_HOSTS, OPERATOR, handleInternal } from "./internal";
+import { OPERATOR, handleInternal, localDev } from "./internal";
 import { handleGmailHook, handleOAuthCallback } from "./gmail";
 import { errText, log } from "./log";
 import { canonicalPath, firstSegment } from "./paths";
@@ -27,7 +27,7 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
 export async function accountFor(request: Request, env: Env): Promise<string | null> {
   const acct = await accountFromRequest(request, env.SESSION_SECRET);
   if (acct) return acct;
-  if (env.DEV_ACCOUNT && LOCAL_HOSTS.has(new URL(request.url).hostname)) return env.DEV_ACCOUNT;
+  if (localDev(env)) return env.DEV_ACCOUNT!;
   return null;
 }
 

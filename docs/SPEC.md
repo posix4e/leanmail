@@ -1515,7 +1515,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - tokens › asks for DEV_AUTH_BYPASS only when DEV_ACCOUNT is set
 - tokens › tests run on the vitest bindings, not .dev.vars
 - tokens › accountFromRequest reads the cookie, then the bearer
-- fetch() › serves /health and 401s an unauthenticated non-local request even with DEV_ACCOUNT set
+- fetch() › serves /health, and 401s an unauthenticated request when PUBLIC_ORIGIN is not local even with DEV_ACCOUNT set
 - scheduled › ticks every active account, at most five at once, logging failures
 - scheduled › mapLimit handles empty input
 

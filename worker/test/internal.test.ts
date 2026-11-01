@@ -1,7 +1,7 @@
-import { SELF } from "cloudflare:test";
+import { SELF, createExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import { dailyTick, mapLimit } from "../src/index";
+import { dailyTick, handleFetch, mapLimit } from "../src/index";
 import { handleInternal } from "../src/internal";
 import { MailContainer } from "../src/container";
 import { accountFromRequest, deriveInternalSecret, deriveSecret, signMac, signMacWithKey, verifyMac } from "../src/tokens";
@@ -97,10 +97,13 @@ describe("GET /internal/health", () => {
     expect((await get("http://localhost:8787/internal/health", { "x-internal-secret": SECRET })).status).toBe(401);
     expect((await get("http://localhost:8787/internal/health", { "x-internal-secret": await derived("a1") })).status).toBe(401);
     expect((await get("http://localhost:8787/internal/health", { "x-internal-secret": dev })).status).toBe(200);
-    // DEV_ACCOUNT is not a fallback off localhost.
-    expect((await get("https://leanmail.example/internal/health", { "x-internal-secret": dev })).status).toBe(401);
-    expect((await get("https://leanmail.example/internal/health", { "x-internal-secret": dev, "x-account-id": "a1" })).status).toBe(401);
-    expect((await get("https://leanmail.example/internal/health", { "x-internal-secret": await derived("a1"), "x-account-id": "a1" })).status).toBe(200);
+    // DEV_ACCOUNT is not a fallback when PUBLIC_ORIGIN is not a localhost origin (production);
+    // the request's own host does not matter (wrangler dev rewrites it to the route's domain).
+    const prod = { ...e, PUBLIC_ORIGIN: "https://leanmail.example" } as unknown as Env;
+    const getProd = (url: string, h: Record<string, string>) => handleInternal(new Request(url, { headers: h }), prod);
+    expect((await getProd("http://localhost:8787/internal/health", { "x-internal-secret": dev })).status).toBe(401);
+    expect((await getProd("https://leanmail.example/internal/health", { "x-internal-secret": dev, "x-account-id": "a1" })).status).toBe(401);
+    expect((await getProd("https://leanmail.example/internal/health", { "x-internal-secret": await derived("a1"), "x-account-id": "a1" })).status).toBe(200);
     expect(seen).toEqual(["dev dev /internal/health", "a1 a1 /internal/health"]);
   });
 });
@@ -277,11 +280,14 @@ describe("tokens", () => {
 });
 
 describe("fetch()", () => {
-  it("serves /health and 401s an unauthenticated non-local request even with DEV_ACCOUNT set", async () => {
+  it("serves /health, and 401s an unauthenticated request when PUBLIC_ORIGIN is not local even with DEV_ACCOUNT set", async () => {
     expect(env.DEV_ACCOUNT).toBe("dev");
     const h = await SELF.fetch("https://leanmail.example/health");
     expect(await h.json()).toMatchObject({ ok: true, worker: "leanmail" });
-    const r = await SELF.fetch("https://leanmail.example/api/msgs");
+    // The dev fallback is keyed on PUBLIC_ORIGIN, not the request host: production (an https
+    // origin) never falls back, whatever host the request carries.
+    const prod = { ...env, PUBLIC_ORIGIN: "https://leanmail.example" } as unknown as Env;
+    const r = await handleFetch(new Request("http://localhost:8787/api/msgs"), prod, createExecutionContext());
     expect(r.status).toBe(401);
     expect(await r.json()).toEqual({ error: "unauthorized" });
   });

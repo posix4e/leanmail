@@ -268,7 +268,8 @@ describe("item 6: /admin/*", () => {
 
 describe("item 7 and the page addendum: everything else", () => {
   it("signed-out sign-in pages and static files go to the operator; with a cookie, to the account", async () => {
-    const { e, calls } = stubbed();
+    const { e: e0, calls } = stubbed();
+    const e = { ...e0, DEV_ACCOUNT: undefined } as unknown as Env; // production: no dev fallback
     await fetchVia(e, "/signin", { headers: { accept: "text/html" } });
     await fetchVia(e, "/signin", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "email=a%40x.example" });
     await fetchVia(e, "/static/app.css");
@@ -285,7 +286,8 @@ describe("item 7 and the page addendum: everything else", () => {
   });
 
   it("a cookie or bearer reaches its account; signed out, a navigation is sent to /signin and an API call is 401", async () => {
-    const { e, calls } = stubbed();
+    const { e: e0, calls } = stubbed();
+    const e = { ...e0, DEV_ACCOUNT: undefined } as unknown as Env; // production: no dev fallback
     const cookie = `lm_session=${await signMac("v1", "a1", "sid.9999999999999.0", S)}`;
     const bearer = `Bearer ${await signMac("lm1", "b1", "r", S)}`;
     await fetchVia(e, "/inbox", { headers: { cookie, accept: "text/html" } });
@@ -399,7 +401,8 @@ describe("M9b: passkey login", () => {
 
 describe("M9b: the sign-up page", () => {
   it("signed out, GET and POST /signup go to the operator; with a cookie, to the account", async () => {
-    const { e, calls } = stubbed();
+    const { e: e0, calls } = stubbed();
+    const e = { ...e0, DEV_ACCOUNT: undefined } as unknown as Env; // production: no dev fallback
     await fetchVia(e, "/signup", { headers: { accept: "text/html" } });
     await fetchVia(e, "/signup?sent=1", { headers: { accept: "text/html" } });
     await fetchVia(e, "/signup", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "email=a%40x.example" });

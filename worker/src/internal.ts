@@ -32,6 +32,21 @@ import { callContainer, containerFor, wake as defaultWake, type WakeFn } from ".
 
 export const OPERATOR = "_operator";
 export const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Local development: DEV_ACCOUNT is set (worker/.dev.vars) AND PUBLIC_ORIGIN is a localhost origin.
+ * Keyed on the configured origin, not the request's host: under `wrangler dev` a custom-domain
+ * route rewrites every request's host to the production domain, while production never has a
+ * localhost PUBLIC_ORIGIN (deploy.yml refuses one). The container applies the same double guard.
+ */
+export function localDev(env: { DEV_ACCOUNT?: string; PUBLIC_ORIGIN?: string }): boolean {
+  if (!env.DEV_ACCOUNT) return false;
+  try {
+    return LOCAL_HOSTS.has(new URL(env.PUBLIC_ORIGIN ?? "").hostname);
+  } catch {
+    return false;
+  }
+}
 const MAX_SEND_BYTES = 25 * 1024 * 1024;
 const MAX_SEND_RCPTS = 50;
 const MAX_ROUTES = 1000;
@@ -381,7 +396,7 @@ export async function handleInternal(request: Request, env: Env, deps: Partial<I
   // x-account-id, else DEV_ACCOUNT on a localhost host; the secret must be that account's.
   const healthCheck = m === "GET" && pathname === "/internal/health";
   const named = request.headers.get("x-account-id")?.trim();
-  const claimed = named || (healthCheck && LOCAL_HOSTS.has(url.hostname) ? env.DEV_ACCOUNT : undefined);
+  const claimed = named || (healthCheck && localDev(env) ? env.DEV_ACCOUNT : undefined);
   const caller = await authenticatedCaller(request, env, claimed);
   if (!caller) return json(401, { error: "unauthorized" });
   try {
