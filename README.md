@@ -94,6 +94,7 @@ make cli            # build the leanmail CLI
 make worker-install # npm install in worker/; then `cd worker && npm test && npm run typecheck`
 make docker         # the container image (linux/amd64; fetches the toolchain once into server/.cache)
 make worker-dev     # wrangler dev, with the container built from server/Dockerfile
+                    # (first: cp worker/.dev.vars.example worker/.dev.vars and set its secrets)
 make accept         # end to end: the image behind wrangler dev, /health, /internal/health,
                     # a delivery to the local Email Routing endpoint, leanmail search
 make app            # the native app's Lean and selftest (macOS; make app-ios for the simulator)

@@ -1,0 +1,7 @@
+# Local `wrangler dev` only. Copy to worker/.dev.vars and fill in your own values;
+# production secrets are set with `wrangler secret put` (docs/SELF-HOSTING.md).
+DEV_ACCOUNT=dev
+INTERNAL_SECRET=change-me-local
+SESSION_SECRET=change-me-local
+MAIL_FROM=no-reply@localhost.test
+PUBLIC_ORIGIN=http://localhost:8787

@@ -11,3 +11,6 @@ node_modules/
 /server/.secrets/
 lean/test/out/
 /server/.cache/
+
+# wrangler dev secrets; copy worker/.dev.vars.example
+worker/.dev.vars
