@@ -362,6 +362,15 @@ CREATE TABLE IF NOT EXISTS auth_challenges (
   kind TEXT NOT NULL CHECK (kind IN ('register','login')),
   expires_at INTEGER NOT NULL
 );
+"),
+  -- Operator: when an account's row last reached the Worker's D1 (`projected_at`) and when its
+  -- container was last provisioned (`provisioned_at`); NULL means it still has to happen, which
+  -- a repeat sign-up or the `pending_projection` lane retries (`Server.Operator.syncPending`).
+  (9, "
+ALTER TABLE accounts ADD COLUMN projected_at INTEGER;
+ALTER TABLE accounts ADD COLUMN provisioned_at INTEGER;
+UPDATE accounts SET projected_at = updated_at WHERE status != 'pending';
+UPDATE accounts SET provisioned_at = updated_at WHERE status = 'active';
 ")
 ]
 

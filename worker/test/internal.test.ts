@@ -129,7 +129,7 @@ describe("POST /internal/email/send", () => {
     await addRoute("me@ex.example", "a1", "vault", [], 1);
     await addRoute("ro@ex.example", "a1", "vault", [], 0);
     const { e, sent } = stubEmail();
-    const body = (from: string) => ({ from, to: ["x@y.example"], raw_b64: b64("x") });
+    const body = (from: string) => ({ from, to: ["x@y.example"], raw_b64: b64(`From: Me <${from}>\r\n\r\nx`) });
     expect((await handleInternal(await req("POST", "/internal/email/send", body("me@ex.example"), "a2"), e)).status).toBe(403);
     expect((await handleInternal(await req("POST", "/internal/email/send", body("ro@ex.example"), "a1"), e)).status).toBe(403);
     expect((await handleInternal(await req("POST", "/internal/email/send", body("me@ex.example"), "_operator"), e)).status).toBe(200);
@@ -236,7 +236,7 @@ describe("tokens", () => {
     expect(vars.MAIL_FROM).toBe("no-reply@x.example");
   });
 
-  it("passes the Cloudflare, AI and log settings through when set, and nothing when not", () => {
+  it("passes the AI and log settings through when set, and nothing when not; the Cloudflare token to _operator only", () => {
     const base = { ...env, CF_API_TOKEN: undefined, CF_ACCOUNT_ID: undefined, AI_BASE_URL: undefined, AI_API_KEY: undefined,
       AI_MODEL: undefined, LOG_LEVEL: undefined, DEV_ACCOUNT: undefined };
     const off = MailContainer.varsFor("a1", base);
@@ -245,9 +245,13 @@ describe("tokens", () => {
     }
     const on = MailContainer.varsFor("a1", { ...base, CF_API_TOKEN: "cft", CF_ACCOUNT_ID: "cfa", AI_BASE_URL: "https://ai.example/v1",
       AI_API_KEY: "aik", AI_MODEL: "m", LOG_LEVEL: "debug" });
-    expect(on).toMatchObject({ CF_API_TOKEN: "cft", CF_ACCOUNT_ID: "cfa", AI_BASE_URL: "https://ai.example/v1", AI_API_KEY: "aik",
-      AI_MODEL: "m", LOG_LEVEL: "debug" });
+    expect(on).toMatchObject({ AI_BASE_URL: "https://ai.example/v1", AI_API_KEY: "aik", AI_MODEL: "m", LOG_LEVEL: "debug" });
+    expect(on.CF_API_TOKEN).toBeUndefined();
+    expect(on.CF_ACCOUNT_ID).toBeUndefined();
+    expect(Object.values(on)).not.toContain("cft");
     expect(on.DEV_AUTH_BYPASS).toBeUndefined();
+    const op = MailContainer.varsFor("_operator", { ...base, CF_API_TOKEN: "cft", CF_ACCOUNT_ID: "cfa" });
+    expect(op).toMatchObject({ ROLE: "operator", CF_API_TOKEN: "cft", CF_ACCOUNT_ID: "cfa" });
   });
 
   it("asks for DEV_AUTH_BYPASS only when DEV_ACCOUNT is set", () => {

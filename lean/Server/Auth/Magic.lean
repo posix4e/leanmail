@@ -14,12 +14,19 @@ import Server.Clock
 The Worker answers `POST /auth/login` itself (always 202) and asks the account's container
 `POST /internal/auth/magic {email, purpose}`. When the email is the account's, the container
 mints a link `v1.<acct>.<rand>.<exp>.<mac>` and a 6-digit code, keeps `sha256(link)` and a keyed
-hash of the code in `magic_links`, and mails both through the Worker's `/internal/email/send`.
+hash of the code in `magic_links`, and asks the Worker to mail both:
+`POST /internal/email/signin {to, kind: "signin"|"welcome", link, code}`. The Worker builds that
+message itself and sends it from `MAIL_FROM`, which no container may name as a From
+(`Server.Send.sendable`), so a container can only ever get its own owner a sign-in mail.
 
 - `GET /auth/magic?t=<link>` (the Worker routes it by the MAC): one use, then a session cookie
   and a redirect to `/`.
 - `POST /auth/code {email, code, name}` (native apps): the code of a live link, compared in
-  constant time, at most five tries per link; then an API token with every scope, shown once.
+  constant time. A wrong code costs each live link one try of its code; a code with five wrong
+  tries no longer signs in, but its link still does (a guesser cannot lock the owner out of
+  the mailed link). Then an API token with every scope, shown once.
+- At most `maxLiveLinks` unused, unexpired links at once: a request beyond that is answered 202
+  and sends nothing (logged `auth.magic_capped`).
 
 Sign-in links live 15 minutes; welcome links (sent on provisioning) 24 hours. -/
 
@@ -30,6 +37,12 @@ open Lean Server.Db Server.Router
 def signinTtlMs : Nat := 15 * 60 * 1000
 def welcomeTtlMs : Nat := 24 * 3600 * 1000
 def maxAttempts : Nat := 5
+/-- Unused, unexpired links an account may hold at once. -/
+def maxLiveLinks : Nat := 3
+
+/-- Live (unused, unexpired) links. -/
+def liveLinks (st : State) (now : Nat) : IO Nat := do
+  return ((← st.db.queryOne "SELECT count(*) AS n FROM magic_links WHERE used_at IS NULL AND expires_at > ?" #[now]).map (·.nat "n")).getD 0
 
 /-- What `magic_links.code6` holds: HMAC under the session secret, so a copied database does not
 hand out live codes. -/
@@ -45,14 +58,8 @@ def newCode : IO String := do
 def accountEmail (st : State) : IO (Option String) := do
   return (← st.db.queryOne "SELECT email FROM account WHERE id = 1").map (·.text "email")
 
-def mailBody (purpose link code : String) (ttl : String) : String :=
-  let intro := if purpose == "welcome" then
-      "Your LeanMail account is ready. Use this link to sign in:"
-    else "Use this link to sign in to LeanMail:"
-  s!"Hello,\n\n{intro}\n\n{link}\n\nOr enter this code in the app: {code}\n\nThe link and the code work once and expire in {ttl}. If you did not ask for this, ignore this mail.\n"
-
-/-- Mint a link and a code, store their hashes, and ask the Worker to mail them. True when the
-Worker accepted the mail. -/
+/-- Mint a link and a code, store their hashes, and ask the Worker to mail them
+(`/internal/email/signin`). True when the Worker accepted the mail. -/
 def sendLink (st : State) (email purpose : String) : IO Bool := do
   let c := st.config
   let now ← Clock.nowMs
@@ -63,14 +70,8 @@ def sendLink (st : State) (email purpose : String) : IO Bool := do
   st.db.exec "INSERT INTO magic_links(token_hash, code6, purpose, expires_at, created_at) VALUES (?, ?, ?, ?, ?)"
     #[Tokens.hash tok, codeHash c code, purpose, exp, now]
   let link := s!"{c.origin}/auth/magic?t={tok}"
-  let mid := s!"<{Core.Ulid.encode now (← Crypto.randomBytes 10)}@{Config.originHost c.publicOrigin}>"
-  let raw := Mail.Build.textMessage {
-    sender := c.mailFrom, recipient := email, date := now, messageId := mid
-    subject := if purpose == "welcome" then "Welcome to LeanMail" else "Sign in to LeanMail"
-    body := mailBody purpose link code (if purpose == "welcome" then "24 hours" else "15 minutes") }
-  let r ← Worker.internal st "/internal/email/send" <| Json.mkObj [
-    ("from", Json.str c.mailFrom), ("to", Json.arr #[Json.str email]),
-    ("raw_b64", Json.str (Core.Base64.encode raw.toUTF8))]
+  let r ← Worker.internal st "/internal/email/signin" <| Json.mkObj [
+    ("to", Json.str email), ("kind", Json.str purpose), ("link", Json.str link), ("code", Json.str code)]
   Log.info "auth.magic_sent" [("purpose", Json.str purpose), ("ok", Json.bool r.isSome)]
   return r.isSome
 
@@ -83,6 +84,9 @@ def request (c : Ctx) (req : Req) : IO Resp := do
   let some email := (jstr? j "email").bind normEmail? | return accepted
   let some mine ← accountEmail c.st | return accepted
   if mine.toLower != email then return accepted
+  if (← liveLinks c.st (← Clock.nowMs)) ≥ maxLiveLinks then
+    Log.warn "auth.magic_capped" [("purpose", Json.str purpose), ("live", Json.num maxLiveLinks)]
+    return accepted
   if ← sendLink c.st mine purpose then return accepted
   return Resp.error 502 "send failed"
 
@@ -106,7 +110,8 @@ def consume (c : Ctx) (req : Req) : IO Resp := do
                                       ("Set-Cookie", Session.cookieHeader st.config cookie)] }
 
 /-- Spend the 6-digit code of a live link for the account's `email`: true once, for the right
-code. A wrong code costs every live link one of its tries; the fifth burns it. Shared by
+code. A wrong code costs every live link one try of its code; after five a link's code no longer
+matches, but the link itself stays usable (`consume`) until it expires. Shared by
 `POST /auth/code` (an API token) and the web sign-in form (a session, `Server.Pages.Signin`). -/
 def spendCode (st : State) (email entered : String) : IO Bool := do
   let some email := normEmail? email | return false
@@ -116,7 +121,8 @@ def spendCode (st : State) (email entered : String) : IO Bool := do
   let now ← Clock.nowMs
   let h := codeHash st.config given
   st.db.transaction do
-    let live ← st.db.queryUnlocked "SELECT token_hash, code6 FROM magic_links WHERE used_at IS NULL AND expires_at > ?" #[now]
+    let live ← st.db.queryUnlocked
+      "SELECT token_hash, code6 FROM magic_links WHERE used_at IS NULL AND expires_at > ? AND attempts < ?" #[now, maxAttempts]
     -- compare against every live link, without stopping early
     let hit := live.foldl (init := none) fun acc r =>
       if Crypto.constantTimeEq (r.text "code6").toUTF8 h.toUTF8 then some (r.blob "token_hash") else acc
@@ -125,9 +131,10 @@ def spendCode (st : State) (email entered : String) : IO Bool := do
       st.db.execUnlocked "UPDATE magic_links SET used_at = ? WHERE token_hash = ? AND used_at IS NULL" #[now, th]
       return true
     | none =>
+      -- only the code's tries: a wrong code never spends the link
       st.db.execUnlocked
-        "UPDATE magic_links SET attempts = attempts + 1, used_at = CASE WHEN attempts + 1 >= ? THEN ? ELSE used_at END WHERE used_at IS NULL AND expires_at > ?"
-        #[maxAttempts, now, now]
+        "UPDATE magic_links SET attempts = attempts + 1 WHERE used_at IS NULL AND expires_at > ? AND attempts < ?"
+        #[now, maxAttempts]
       return false
 
 /-- `POST /auth/code {email, code, name}` → `{token}`. -/

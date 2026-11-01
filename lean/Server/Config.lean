@@ -64,6 +64,11 @@ def isLocalOriginStr (o : String) : Bool :=
   ["http://localhost", "http://127.0.0.1"].any fun p =>
     o == p || o.startsWith (p ++ ":") || o.startsWith (p ++ "/")
 
+/-- An `http(s)://localhost`, `127.0.0.1` or `[::1]` URL, with or without a port or path. -/
+def isLocalUrl (u : String) : Bool :=
+  ["http://localhost", "http://127.0.0.1", "http://[::1]", "https://localhost", "https://127.0.0.1", "https://[::1]"].any fun p =>
+    u == p || u.startsWith (p ++ ":") || u.startsWith (p ++ "/")
+
 def fromEnv : IO Config := do
   let port := (← env "PORT" "8080").toNat?.getD 8080
   return {
@@ -118,6 +123,19 @@ def aiUrl (c : Config) : String :=
   let b := if c.aiBaseUrl.endsWith "/" then String.ofList c.aiBaseUrl.toList.dropLast else c.aiBaseUrl
   b ++ "/chat/completions"
 def isAdminEmail (c : Config) (email : String) : Bool := c.adminEmails.any (·.toLower == email.toLower)
+
+/-- The development default of `SESSION_SECRET`. -/
+def defaultSessionSecret : String := "dev-session-secret-change-me"
+
+/-- Why this config must not serve, if it must not: outside a bare localhost run (`bareDev`) the
+session secret may not be the development default (or empty) and the internal secret may not be
+empty. `Server.Main.boot` logs the reason and exits 1. -/
+def refusal? (c : Config) : Option String :=
+  if c.bareDev then none
+  else if c.sessionSecret.isEmpty || c.sessionSecret == defaultSessionSecret then
+    some "SESSION_SECRET is unset or the development default"
+  else if c.internalSecret.isEmpty then some "INTERNAL_SECRET is empty"
+  else none
 
 end Config
 end Server

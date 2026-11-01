@@ -146,12 +146,32 @@ def matchPath : List Seg → List String → Option (List (String × String))
   | _, _ => none
 
 /-- Internal routes carry the shared secret, compared in constant time. With no configured
-secret they are open only on a bare localhost run (`Config.bareDev`). -/
+secret they are open only on a bare localhost run (`Config.bareDev`). A request the Worker
+forwarded from a client carries `x-lm-public: 1` (the Worker stamps it and strips any a client
+sent), and is never internal, whatever secret it carries. -/
 def internalOk (st : State) (req : Req) : Bool :=
-  if st.config.internalSecret.isEmpty then st.config.bareDev
+  if (req.header? "x-lm-public").isSome then false
+  else if st.config.internalSecret.isEmpty then st.config.bareDev
   else match req.header? "x-internal-secret" with
     | some v => Crypto.constantTimeEq v.toUTF8 st.config.internalSecret.toUTF8
     | none => false
+
+/-- The raw (still percent-encoded) request path, checked before routing: no empty segment
+(`//`; one trailing `/` is allowed), no `.`/`..` segment, no percent-encoded `/`, `\`, `.` or NUL
+in any segment, and a first segment of plain `[A-Za-z0-9_.-]+` (so `/%69nternal/…` never routes
+as `/internal/…`). Anything else is answered 404 by `Server.Main`. -/
+def rawPathOk (raw : String) : Bool := Id.run do
+  if raw == "/" || raw.isEmpty then return true
+  if !raw.startsWith "/" then return false
+  let segs := (String.ofList (raw.toList.drop 1)).splitOn "/"
+  let segs := if segs.getLast? == some "" then segs.dropLast else segs
+  if segs.isEmpty then return false
+  for s in segs do
+    if s.isEmpty || s == "." || s == ".." then return false
+    let l := s.toLower
+    if ["%2f", "%5c", "%2e", "%00"].any fun x => (l.splitOn x).length > 1 then return false
+  let first := segs.headD ""
+  return first.toList.all fun c => c.isAlphanum || c == '_' || c == '.' || c == '-'
 
 /-- Lower-cased, trimmed; `none` unless it looks like one address. -/
 def normEmail? (s : String) : Option String :=

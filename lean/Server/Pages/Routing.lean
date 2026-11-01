@@ -68,8 +68,12 @@ def routingPage (p : Page) (notice : Node := empty) (status : Nat := 200) : IO R
   let st := p.c.st
   let ds ← Routing.loadDomains st
   let as ← Routing.loadAddresses st
-  let canApply := st.config.hasCloudflare
-  let pl ← if !canApply || p.req.param? "plan" == some "1" || status == 409 then do pure (some (← Routing.planNow st)) else pure none
+  -- with a token here, or through the operator (an account container): plan on request
+  let canTry := st.config.hasCloudflare || Routing.needsOperator st.config
+  let pl ← if !canTry || p.req.param? "plan" == some "1" || status == 409 then do pure (some (← Routing.planNow st)) else pure none
+  let canApply := match pl with
+    | some x => Routing.canApplyPlan st.config x
+    | none => canTry
   let saved := match p.req.param? "saved" with
     | some "ok" => flash "ok" "Saved, and sent to the Worker."
     | some "unprojected" => flash "err" "Saved, but the Worker did not take the new routes; it will on the next change."
@@ -163,7 +167,10 @@ def routingApply (p : Page) : IO Resp := do
   let remove := f.filterMap fun (k, v) => if k == "remove" then some v else none
   match ← Routing.apply p.c.st (some (formField f "plan_id")) remove with
   | .ok _ => return redirect "/settings/routing?saved=applied&plan=1#plan" 303
-  | .error (503, _, _) => routingPage p (flash "err" "This server has no CF_API_TOKEN, so it cannot apply the plan.") 503
+  | .error (503, code, _) =>
+    routingPage p (flash "err" (if code == "routing_needs_operator" then "The operator could not be reached to apply the plan. Try again later."
+      else "This server has no CF_API_TOKEN, so it cannot apply the plan.")) 503
+  | .error (403, _, _) => routingPage p (flash "err" "A domain in this plan is not granted to this account.") 403
   | .error (_, code, _) =>
     routingPage p (flash "err" (if code == "plan_changed" then "Cloudflare changed since the plan was shown. Here is the new one." else code)) 409
 

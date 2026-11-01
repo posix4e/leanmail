@@ -104,6 +104,19 @@ export async function handleEmail(message: ForwardableEmailMessage, env: Env, ct
       message.setReject("address not deliverable");
       return;
     }
+    // Nothing is stored here, so a looped, bulk or auto-submitted message is refused outright
+    // (no retry would change it), and a tripped breaker is a temporary failure the sender retries
+    // once the hour has moved on.
+    const guard = loopGuard(message.headers);
+    if (guard) {
+      decision(acct, "forward", 0, { match: route.match, refused: guard });
+      message.setReject("not forwarded: possible mail loop");
+      return;
+    }
+    if (await breakerTripped(env.DB, acct, now)) {
+      decision(acct, "forward", 0, { match: route.match, refused: "breaker" });
+      throw new Error("forward-only delivery deferred: forward breaker tripped");
+    }
     const ok = await forwardEach(message, targets, `fo@${zone}`);
     decision(acct, "forward", ok, { match: route.match, targets: targets.length });
     // Nothing stored and nothing delivered: a temporary failure, so the sender retries.

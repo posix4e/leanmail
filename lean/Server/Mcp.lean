@@ -35,7 +35,7 @@ is a drop-in for `--local`; here they call the route handlers directly. A refusa
 result with `isError: true` and the JSON error as its text.
 
 Privileged mail (`Server.AI.withheldSql`) is withheld: `get_message` and `get_attachment` answer
-`{id, withheld: true}`, the lists carry such entries in place of the message (and a `withheld`
+`{id, withheld: true}`, the lists leave such messages out (no id, no subject; only a `withheld`
 count), and `account_status` reports the counts. Every `tools/call` is logged to `mcp_log`
 (time, token id, tool, ok, milliseconds), never its arguments. -/
 
@@ -94,11 +94,12 @@ def withheldIds (st : State) (ids : Array String) : IO (List String) := do
   let rows ← st.db.query s!"SELECT m.id FROM messages m WHERE m.id IN ({marks}) AND {AI.withheldSql}" (ids.map fun i => (.text i : Value))
   return rows.toList.map (·.text "id")
 
-/-- A list answer `{items, next}` with withheld entries masked, plus `withheld` when any were. -/
+/-- A list answer `{items, next}` with withheld messages left out, plus `withheld` (how many)
+when any were. -/
 def listJson (st : State) (rows : Array Row) (next : Option String) : IO Json := do
   let rows ← Api.withTriage st rows
   let held ← withheldIds st (rows.map (·.text "id"))
-  let items := rows.map fun r => if held.contains (r.text "id") then withheldJson (r.text "id") else Api.listItem r
+  let items := (rows.filter fun r => !held.contains (r.text "id")).map Api.listItem
   return Json.mkObj ([("items", Json.arr items), ("next", match next with | some n => Json.str n | none => Json.null)] ++
     (if held.isEmpty then [] else [("withheld", Json.num held.length)]))
 
@@ -151,9 +152,9 @@ def expiringSoon (c : Ctx) (a : Json) : ToolM Json := do
   let msgs := (j.getObjValAs? (Array Json) "messages").toOption.getD #[]
   let held ← (withheldIds c.st (msgs.filterMap fun m => (m.getObjValAs? String "id").toOption) : IO _)
   if held.isEmpty then return j
-  let masked := msgs.map fun m => match (m.getObjValAs? String "id").toOption with
-    | some i => if held.contains i then withheldJson i else m
-    | none => m
+  let masked := msgs.filter fun m => match (m.getObjValAs? String "id").toOption with
+    | some i => !held.contains i
+    | none => true
   return setField (setField j "messages" (Json.arr masked)) "withheld" (Json.num held.length)
 
 def accountStatus (c : Ctx) (_ : Json) : ToolM Json := do

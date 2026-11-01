@@ -10,7 +10,9 @@ name: deploy
 #   secrets   CLOUDFLARE_API_TOKEN   start from Cloudflare's "Edit Cloudflare Workers" token template and
 #                                    add what `wrangler deploy` reports missing (D1, R2, Containers)
 #             CLOUDFLARE_ACCOUNT_ID
-#   variables PUBLIC_ORIGIN          e.g. https://mail.example.com, checked after the deploy
+# Production's vars (PUBLIC_ORIGIN, SIGNUP_MODE, ADMIN_EMAILS...) are the committed
+# worker/wrangler.jsonc; the deploy refuses a PUBLIC_ORIGIN there that is not a public https origin
+# (`wrangler dev` takes the local one from worker/.dev.vars), and checks /health on it afterwards.
 # Without CLOUDFLARE_API_TOKEN the deploy job is skipped (forks, and installs that deploy by hand).
 on:
   push:
@@ -31,7 +33,6 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +50,23 @@ jobs:
       - name: The Worker is still called leanmail
         run: |
           grep -q '"name": "leanmail"' worker/wrangler.jsonc
+
+      # The committed vars are production's: one PUBLIC_ORIGIN, https, on a public host name.
+      - name: wrangler.jsonc names a public https PUBLIC_ORIGIN
+        if: steps.creds.outputs.go == 'true'
+        run: |
+          origins=$(grep -oE '"PUBLIC_ORIGIN"[[:space:]]*:[[:space:]]*"[^"]*"' worker/wrangler.jsonc | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/')
+          if [ "$(printf '%s\n' "$origins" | grep -c .)" != "1" ]; then
+            echo "worker/wrangler.jsonc must set vars.PUBLIC_ORIGIN exactly once (found: $origins)"; exit 1
+          fi
+          origin="$origins"
+          if ! printf '%s' "$origin" | grep -Eq '^https://([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}(:[0-9]{1,5})?$'; then
+            echo "vars.PUBLIC_ORIGIN must be an https origin on a public host name, no path or trailing slash (got: $origin)"; exit 1
+          fi
+          if printf '%s' "$origin" | grep -Eq '^https://(localhost|([^/]*\.)?(localhost|local|test|example|invalid|internal))(:[0-9]+)?$'; then
+            echo "vars.PUBLIC_ORIGIN is a local or reserved name (got: $origin)"; exit 1
+          fi
+          echo "PUBLIC_ORIGIN=$origin" >> "$GITHUB_ENV"
 
       # A placeholder database_id means `wrangler d1 create` was never wired in.
       - name: wrangler.jsonc names a real D1 database
@@ -94,7 +112,7 @@ jobs:
         run: npx wrangler deploy
 
       - name: Health check
-        if: steps.creds.outputs.go == 'true' && env.PUBLIC_ORIGIN != ''
+        if: steps.creds.outputs.go == 'true'
         run: |
           for i in $(seq 1 30); do
             if curl -sf "$PUBLIC_ORIGIN/health"; then echo; exit 0; fi

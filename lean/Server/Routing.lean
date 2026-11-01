@@ -37,6 +37,25 @@ The Cloudflare API goes through `State.cloudflare`, so tests answer with a fake.
 | `GET /api/config/plan` | session | the diff against Cloudflare |
 | `POST /api/config/apply {plan_id?, remove?}` | session | 503 `no_cf_token` without the token |
 | `GET /api/sendable` | token `read` | the From choices |
+
+**Grants.** An account may add, plan and apply only the domains the operator granted it: the
+Worker answers `GET /internal/grants` → `{domains}` from D1 for the calling account
+(`Worker.grants`). Adding an ungranted domain is 403 `domain_not_granted`; a domain held from
+before that is not granted is left out of the plan (a `domain_not_granted` problem) and so out of
+apply. The operator container and the dev bypass may use any domain. A Worker that does not answer
+grants nothing. The plan never lists the Cloudflare account's other zones, and destination
+addresses are only used to check this account's own forward targets.
+
+**Who talks to Cloudflare.** `CF_API_TOKEN` is given only to the operator container. An account
+container (`needsOperator`) sends its granted domains and their addresses to the Worker's
+`POST /internal/routing/plan` / `apply` (`{domains, addresses[, plan_id, remove]}`); the Worker
+forwards the body to the operator's own `POST /internal/routing/plan|apply` with
+`x-routing-account: <account>` and hands back the operator's status and body. The operator
+(`opPlan`, `opApply`, internal auth, operator only) refuses 403 `domain_not_granted` unless every
+domain in the body is in its `domain_grants` for that account, then plans and applies with its
+token. When the operator cannot be reached, the account's plan is the one made against zones
+assumed empty and `GET /api/config/plan` answers it with 503 `routing_needs_operator`; apply is
+refused the same way. The account keeps `routing.last_apply` itself.
 -/
 
 namespace Server.Routing
@@ -93,6 +112,27 @@ def Domain.toJson (d : Domain) : Json := Json.mkObj [
 def Address.toJson (a : Address) : Json := Json.mkObj [
   ("address", Json.str a.address), ("domain", Json.str a.domain), ("mail", Json.str a.mail),
   ("forward_to", Json.arr (a.forwardTo.toArray.map Json.str)), ("can_send", Json.bool a.canSend), ("note", Json.str a.note)]
+
+def jStrs (j : Json) (k : String) : List String :=
+  ((j.getObjValAs? (Array Json) k).toOption.getD #[]).toList.filterMap fun | .str v => some v | _ => none
+
+/-- A domain as `Domain.toJson` wrote it (the operator reads an account's routing so). -/
+def Domain.ofJson? (j : Json) : Option Domain := do
+  let name := ((jstr? j "name").getD "").toLower
+  guard (Blocks.isDomain name)
+  let dflt := (j.getObjVal? "default").toOption.getD Json.null
+  let mail := (jstr? dflt "mail").getD "vault"
+  guard (mails.contains mail)
+  return { name, manage := (jbool? j "manage").getD true, defaultMail := mail,
+           defaultForwardTo := (jStrs dflt "forward_to").take forwardMax, sending := jStrs j "sending" }
+
+/-- An address as `Address.toJson` wrote it. -/
+def Address.ofJson? (j : Json) : Option Address := do
+  let address ← (jstr? j "address").bind normEmail?
+  let mail := (jstr? j "mail").getD "vault"
+  guard (mails.contains mail)
+  return { address, domain := Blocks.domainOf address, mail, forwardTo := (jStrs j "forward_to").take forwardMax,
+           canSend := (jbool? j "can_send").getD true }
 
 /-! ## The Worker's routes -/
 
@@ -155,6 +195,22 @@ def sendingOf (name : String) (raw : Option Json) (d : List String) : Except (Na
 def ownDomains (st : State) : IO (List String) := do
   return (← loadDomains st).map (·.name)
 
+/-! ## Grants -/
+
+/-- The domains this container may route: `none` for any (the operator container, the dev
+bypass); otherwise the Worker's grants for this account, empty when it did not answer. -/
+def grantedDomains (st : State) : IO (Option (List String)) := do
+  if st.config.isOperator || st.config.devBypassOn then return none
+  return some ((← Worker.grants st).getD [])
+
+def grantOk (granted : Option (List String)) (name : String) : Bool :=
+  match granted with
+  | none => true
+  | some gs => gs.contains name.toLower
+
+/-- An account container with no Cloudflare token of its own: Cloudflare is the operator's. -/
+def needsOperator (c : Config) : Bool := !c.hasCloudflare && !c.isOperator && !c.devBypassOn
+
 /-! ## Changes -/
 
 /-- The routing JSON with the projection's outcome. -/
@@ -174,6 +230,9 @@ def changed (st : State) (status : Nat := 200) : IO Resp := do
 def addDomain (st : State) (j : Json) : IO (Except (Nat × String) Unit) := do
   let name := (Core.Text.Str.trim ((jstr? j "name").getD "")).toLower
   if !Blocks.isDomain name then return bad "name"
+  if !grantOk (← grantedDomains st) name then
+    Log.warn "routing.domain_not_granted" []
+    return .error (403, "domain_not_granted")
   if (← st.db.queryOne "SELECT 1 AS x FROM domains WHERE name = ?" #[name]).isSome then return .error (409, "exists")
   let own := name :: (← ownDomains st)
   let r : Except (Nat × String) (String × List String × List String) := do
@@ -272,9 +331,9 @@ structure Actual where
   ok : Bool
   error : Option String := none
   zones : List Zone := []
-  /-- Destination addresses and whether each is verified; `none` when not read. -/
+  /-- Destination addresses and whether each is verified; `none` when not read. Used only to
+  check this account's own forward targets; never shown. -/
   destinations : Option (List (String × Bool)) := none
-  otherZones : List String := []
   calls : Nat := 0
   deriving Inhabited
 
@@ -353,8 +412,9 @@ def readZone (st : State) (d : Domain) (zid : String) : IO (Zone × Nat) := do
                    catchAll := if catchAll.action.isEmpty then none else some catchAll,
                    rules := (rules.filter (·.matcher != "all")).toList, sending }, calls)
 
-/-- What Cloudflare has for the vault's domains. Never throws. -/
-def readActual (st : State) (ds : List Domain) : IO Actual := do
+/-- What Cloudflare has for the vault's domains, those it was granted only (an ungranted one is
+not read: `zone_unreadable` with `domain_not_granted`). Never throws. -/
+def readActual (st : State) (ds : List Domain) (granted : Option (List String) := none) : IO Actual := do
   if !st.config.hasCloudflare then return { ok := false, error := some "no_token" }
   let .ok zs ← cf st "GET" "/zones?per_page=50" | return { ok := false, error := some "cf_error" }
   let zones := (jArr zs).toList.map fun z => (((jstr? z "name").getD "").toLower, (jstr? z "id").getD "")
@@ -365,6 +425,9 @@ def readActual (st : State) (ds : List Domain) : IO Actual := do
   let mut out : Array Zone := #[]
   let mut calls := 2
   for d in ds do
+    if !grantOk granted d.name then
+      out := out.push { name := d.name, zoneId := some "", error := some "domain_not_granted" }
+      continue
     match zones.lookup d.name with
     | some zid =>
       if d.manage then
@@ -373,9 +436,7 @@ def readActual (st : State) (ds : List Domain) : IO Actual := do
         calls := calls + n
       else out := out.push { name := d.name, zoneId := some zid }
     | none => out := out.push { name := d.name }
-  let listed := ds.map (·.name)
-  return { ok := true, zones := out.toList, destinations, calls,
-           otherZones := (zones.map (·.1)).filter (!listed.contains ·) |>.toArray.qsort (· < ·) |>.toList }
+  return { ok := true, zones := out.toList, destinations, calls }
 
 /-! ## The plan (pure) -/
 
@@ -521,20 +582,83 @@ def Plan.toJson (p : Plan) (canApply : Bool) : Json := Json.mkObj [
   ("problems", Json.arr (p.problems.toArray.map fun x => Json.mkObj [("severity", Json.str x.severity),
     ("code", Json.str x.code), ("domain", optJ x.domain), ("text", Json.str x.text)]))]
 
-/-- A plan from a fresh read; without a token, against zones assumed empty. -/
-def planNow (st : State) : IO Plan := do
-  let ds ← loadDomains st
-  let as ← loadAddresses st
+def optStr? (j : Json) (k : String) : Option String := jstr? j k
+
+/-- A plan as `Plan.toJson` wrote it: what the operator answers an account container. -/
+def Plan.ofJson? (j : Json) : Option Plan := do
+  let ok ← jbool? j "ok"
+  let ops ← (j.getObjValAs? (Array Json) "ops").toOption
+  let un ← (j.getObjValAs? (Array Json) "unmanaged").toOption
+  let ps ← (j.getObjValAs? (Array Json) "problems").toOption
+  let ops := ops.toList.map fun o => ({
+    key := (jstr? o "key").getD "", kind := (jstr? o "kind").getD "", domain := (jstr? o "domain").getD ""
+    zoneId := (jstr? o "zone_id").getD "", address := optStr? o "address", ruleId := optStr? o "rule_id"
+    sendingId := optStr? o "sending_id", danger := (jbool? o "danger").getD false, text := (jstr? o "text").getD "" } : Op)
+  let un := un.toList.map fun u =>
+    let r := (u.getObjVal? "rule").toOption.getD Json.null
+    ({ domain := (jstr? u "domain").getD "", zoneId := (jstr? u "zone_id").getD "", text := (jstr? u "text").getD ""
+       rule := { id := (jstr? r "id").getD "", name := (jstr? r "name").getD "", enabled := (jbool? r "enabled").getD true
+                 matcher := (jstr? r "matcher").getD "", action := (jstr? r "action").getD "", target := optStr? r "target" } } : Unmanaged)
+  let ps := ps.toList.map fun x => ({ severity := (jstr? x "severity").getD "", code := (jstr? x "code").getD ""
+                                      domain := optStr? x "domain", text := (jstr? x "text").getD "" } : Problem)
+  return { ok, error := optStr? j "error", ops, unmanaged := un, problems := ps,
+           assumed := (jbool? j "assumed").getD false, id := (jstr? j "id").getD "" }
+
+/-- The domains of `all` that `granted` allows, and their addresses. -/
+def grantedRouting (all : List Domain) (allAs : List Address) (granted : Option (List String)) : List Domain × List Address :=
+  let ds := all.filter (grantOk granted ·.name)
+  let names := ds.map (·.name)
+  (ds, allAs.filter (names.contains ·.domain))
+
+/-- The managed domains of `all` that are not granted, as problems. -/
+def refusedProblems (all : List Domain) (granted : Option (List String)) : List Problem :=
+  (all.filter fun d => d.manage && !grantOk granted d.name).map fun d =>
+    prob "bad" "domain_not_granted" d.name s!"{d.name} is not granted to this account, so nothing about it is read or changed at Cloudflare. Ask the operator to grant it."
+
+/-- The plan against zones assumed empty (no token to read them with). -/
+def assumedPlan (ds : List Domain) (as : List Address) (worker err : String) : Plan :=
+  let zones := ds.map fun d => ({ name := d.name, zoneId := some "", readable := true } : Zone)
+  let p := { plan ds as { ok := false, error := some err, zones } worker (assumed := true) with ok := false }
+  { p with id := planId p }
+
+/-- A plan for these domains and addresses (already the granted ones) from a fresh read with this
+container's token; without one, against zones assumed empty. -/
+def planWith (st : State) (ds : List Domain) (as : List Address) (granted : Option (List String)) : IO Plan := do
   let worker := st.config.cfWorker
   let p ← if st.config.hasCloudflare then do
-      pure (plan ds as (← readActual st ds) worker)
-    else
-      let zones := ds.map fun d => ({ name := d.name, zoneId := some "", readable := true } : Zone)
-      pure ({ plan ds as { ok := false, error := some "no_token", zones } worker (assumed := true) with ok := false })
-  let p := { p with id := planId p }
+      let p := plan ds as (← readActual st ds granted) worker
+      pure { p with id := planId p }
+    else pure (assumedPlan ds as worker (if needsOperator st.config then "routing_needs_operator" else "no_token"))
   Log.info "routing.planned" [("ops", Json.num p.ops.length), ("problems", Json.num p.problems.length),
     ("assumed", Json.bool p.assumed)]
   return p
+
+/-- What an account container sends the operator: its granted routing. -/
+def routingBody (ds : List Domain) (as : List Address) (extra : List (String × Json) := []) : Json :=
+  Json.mkObj ([("domains", Json.arr (ds.toArray.map Domain.toJson)), ("addresses", Json.arr (as.toArray.map Address.toJson))] ++ extra)
+
+/-- A plan from a fresh read. Only granted domains are planned (`grantedDomains`); each other
+managed one is a `domain_not_granted` problem. An account container (`needsOperator`) has the
+operator make it (`POST /internal/routing/plan` through the Worker); when that fails, the plan
+against zones assumed empty, with the error `routing_needs_operator`. -/
+def planNow (st : State) : IO Plan := do
+  let granted ← grantedDomains st
+  let all ← loadDomains st
+  let (ds, as) := grantedRouting all (← loadAddresses st) granted
+  let p ← if needsOperator st.config then do
+      let r ← st.worker.callStatus "POST" "/internal/routing/plan" (routingBody ds as)
+      match r.bind fun (s, j) => if s == 200 then Plan.ofJson? j else none with
+      | some p => pure p
+      | none =>
+        Log.warn "routing.operator_unreachable" [("status", match r with | some (s, _) => Json.num s | none => Json.null)]
+        pure (assumedPlan ds as st.config.cfWorker "routing_needs_operator")
+    else planWith st ds as granted
+  -- the refused domains change nothing apply would do, so the id stays
+  return { p with problems := p.problems ++ refusedProblems all granted }
+
+/-- Whether a plan answered here can be applied: with this container's token, or made by the
+operator for this account. -/
+def canApplyPlan (c : Config) (p : Plan) : Bool := c.hasCloudflare || (needsOperator c && p.ok && !p.assumed)
 
 /-! ## Apply -/
 
@@ -582,11 +706,13 @@ def runAll (st : State) (ops : List Op) : IO (Array Applied) := do
 def appliedJson (a : Applied) : Json := Json.mkObj [("key", Json.str a.key), ("ok", Json.bool a.ok),
   ("error", optJ a.error), ("skipped", Json.bool a.skipped)]
 
-/-- Apply the plan the owner saw: made again first, refused (`plan_changed`) unless it is the same;
-unmanaged rules are removed only when named in `remove` and still listed. -/
-def apply (st : State) (planId? : Option String) (remove : List String) : IO (Except (Nat × String × Json) Json) := do
+/-- Apply the plan the owner saw, for these (granted) domains and addresses, with this
+container's token: made again first, refused (`plan_changed`) unless it is the same; unmanaged
+rules are removed only when named in `remove` and still listed. `{applied, plan}`. -/
+def applyWith (st : State) (ds : List Domain) (as : List Address) (granted : Option (List String))
+    (planId? : Option String) (remove : List String) : IO (Except (Nat × String × Json) Json) := do
   if !st.config.hasCloudflare then return .error (503, "no_cf_token", Json.null)
-  let fresh ← planNow st
+  let fresh ← planWith st ds as granted
   let listed := fresh.unmanaged.map (·.rule.id)
   if !fresh.ok || (planId?.any (· != fresh.id)) || remove.any (!listed.contains ·) then
     return .error (409, "plan_changed", fresh.toJson true)
@@ -596,13 +722,86 @@ def apply (st : State) (planId? : Option String) (remove : List String) : IO (Ex
   let idx (k : String) := (kindOrder.idxOf k)
   let todo := (fresh.ops ++ removals).toArray.qsort (fun x y => x.domain < y.domain || (x.domain == y.domain && idx x.kind < idx y.kind))
   let applied ← runAll st todo.toList
-  let now ← Clock.nowMs
-  let summary := Json.mkObj [("at", Json.num now), ("plan_id", Json.str fresh.id), ("applied", Json.arr (applied.map appliedJson))]
-  st.db.exec "INSERT INTO settings (key, value, updated_at) VALUES ('routing.last_apply', ?1, ?2)
-    ON CONFLICT(key) DO UPDATE SET value = ?1, updated_at = ?2" #[summary.compress, now]
   Log.info "routing.applied" [("ops", Json.num applied.size), ("failed", Json.num (applied.filter (!·.ok)).size)]
-  let after ← planNow st
-  return .ok (Json.mkObj [("applied", Json.arr (applied.map appliedJson)), ("plan", after.toJson true)])
+  let after ← planWith st ds as granted
+  return .ok (Json.mkObj [("applied", Json.arr (applied.map appliedJson)), ("plan_id", Json.str fresh.id),
+    ("plan", after.toJson true)])
+
+/-- Apply the plan the owner saw (`applyWith`), here or, in an account container, at the
+operator (`POST /internal/routing/apply` through the Worker); the outcome is kept as
+`routing.last_apply`. -/
+def apply (st : State) (planId? : Option String) (remove : List String) : IO (Except (Nat × String × Json) Json) := do
+  let granted ← grantedDomains st
+  let (ds, as) := grantedRouting (← loadDomains st) (← loadAddresses st) granted
+  let r ← if needsOperator st.config then do
+      let extra := [("plan_id", match planId? with | some i => Json.str i | none => Json.null),
+                    ("remove", Json.arr (remove.toArray.map Json.str))]
+      match ← st.worker.callStatus "POST" "/internal/routing/apply" (routingBody ds as extra) with
+      | some (200, j) =>
+        if (j.getObjValAs? (Array Json) "applied").isOk then pure (.ok j)
+        else pure (.error (503, "routing_needs_operator", Json.null))
+      | some (s, j) =>
+        match jstr? j "error" with
+        | some code => pure (.error (s, code, (j.getObjVal? "plan").toOption.getD Json.null))
+        | none => pure (.error (503, "routing_needs_operator", Json.null))
+      | none => pure (.error (503, "routing_needs_operator", Json.null))
+    else applyWith st ds as granted planId? remove
+  if let .ok j := r then
+    let now ← Clock.nowMs
+    let summary := Json.mkObj [("at", Json.num now), ("plan_id", (j.getObjVal? "plan_id").toOption.getD Json.null),
+      ("applied", (j.getObjVal? "applied").toOption.getD (Json.arr #[]))]
+    st.db.exec "INSERT INTO settings (key, value, updated_at) VALUES ('routing.last_apply', ?1, ?2)
+      ON CONFLICT(key) DO UPDATE SET value = ?1, updated_at = ?2" #[summary.compress, now]
+  return r
+
+/-! ## The operator's side of an account's plan and apply -/
+
+/-- The account a forwarded plan or apply is for, its routing from the body, and its grants
+from `domain_grants`; refused unless this is the operator container (404), the Worker named the
+account (`x-routing-account`, 400) and every domain in the body is granted to it (403). -/
+def opRouting (c : Ctx) (req : Req) : IO (Except Resp (String × List Domain × List Address × List String)) := do
+  if !c.st.config.isOperator then return .error Resp.notFound
+  let some acct := (req.header? "x-routing-account").map Core.Text.Str.trim | return .error (Resp.error 400 "no routing account")
+  if acct.isEmpty then return .error (Resp.error 400 "no routing account")
+  let j := req.json
+  let some dsJ := (j.getObjValAs? (Array Json) "domains").toOption | return .error (Resp.error 400 "bad domains")
+  let asJ := (j.getObjValAs? (Array Json) "addresses").toOption.getD #[]
+  if dsJ.size > 100 || asJ.size > 5000 then return .error (Resp.error 400 "too many")
+  let ds := dsJ.toList.filterMap Domain.ofJson?
+  if ds.length != dsJ.size then return .error (Resp.error 400 "bad domains")
+  let granted := (← c.st.db.query "SELECT domain FROM domain_grants WHERE account_id = ?" #[acct]).toList.map (·.text "domain")
+  if let some d := ds.find? (!granted.contains ·.name) then
+    Log.warn "routing.op_not_granted" [("account", Json.str acct)]
+    return .error (Resp.json 403 (Json.mkObj [("error", Json.str "domain_not_granted"), ("domain", Json.str d.name)]))
+  let names := ds.map (·.name)
+  let as := (asJ.toList.filterMap Address.ofJson?).filter (names.contains ·.domain)
+  return .ok (acct, ds, as, granted)
+
+/-- `POST /internal/routing/plan {domains, addresses}` with `x-routing-account` (operator only). -/
+def opPlan (c : Ctx) (req : Req) : IO Resp := do
+  match ← opRouting c req with
+  | .error r => return r
+  | .ok (_, ds, as, granted) =>
+    return Resp.ok ((← planWith c.st ds as (some granted)).toJson c.st.config.hasCloudflare)
+
+/-- `POST /internal/routing/apply {domains, addresses, plan_id?, remove?}` with `x-routing-account`. -/
+def opApply (c : Ctx) (req : Req) : IO Resp := do
+  match ← opRouting c req with
+  | .error r => return r
+  | .ok (acct, ds, as, granted) =>
+    let j := req.json
+    let remove := ((j.getObjValAs? (Array String) "remove").toOption.getD #[]).toList
+    match ← applyWith c.st ds as (some granted) (jstr? j "plan_id") remove with
+    | .ok r =>
+      Log.info "routing.op_applied" [("account", Json.str acct)]
+      return Resp.ok r
+    | .error (s, code, p) => return Resp.json s (Json.mkObj [("error", Json.str code), ("plan", p)])
+
+/-- The operator container's routes for the Worker's forwards. -/
+def operatorRoutes : Array Route := #[
+  route "POST" "/internal/routing/plan" .internal opPlan,
+  route "POST" "/internal/routing/apply" .internal opApply
+]
 
 /-! ## Routes -/
 
@@ -634,7 +833,12 @@ def addressDelete (c : Ctx) (_ : Req) : IO Resp := do
   changed c.st
 
 def planGet (c : Ctx) (_ : Req) : IO Resp := do
-  return Resp.ok ((← planNow c.st).toJson c.st.config.hasCloudflare)
+  let p ← planNow c.st
+  let j := p.toJson (canApplyPlan c.st.config p)
+  -- an account container whose operator did not answer
+  if needsOperator c.st.config && p.error == some "routing_needs_operator" then
+    return Resp.json 503 (Json.mkObj [("error", Json.str "routing_needs_operator"), ("plan", j)])
+  return Resp.ok j
 
 def applyPost (c : Ctx) (req : Req) : IO Resp := do
   let j := req.json

@@ -13,6 +13,7 @@ import Server.Gmail.Spam
 import Server.Gmail.Watch
 import Server.Expiry
 import Server.AI
+import Server.Operator
 
 /-! # Jobs: lanes under a lease
 
@@ -24,7 +25,8 @@ killed without freeing it is free again once `lease_until` passes.
 
 `tick` runs what is due: drain the spool, then with a Gmail connection the `gmail.poll`,
 `gmail.mirror`, `gmail.spam` lanes and a `gmail.backfill` step while a backfill runs, and with the
-AI on the `ai` triage lane (`Server.AI.triageStep`); `daily`
+AI on the `ai` triage lane (`Server.AI.triageStep`), and in the operator container the
+`pending_projection` lane (`Server.Operator.syncPending`); `daily`
 adds the watch renewal, the send-as refresh and pruning (`history_failures` for mail now held or
 given up on over 30 days ago, mirror and spam rows for deleted mail).
 
@@ -111,6 +113,9 @@ def tick (st : State) (daily : Bool) (background : Bool := false) : IO (Array St
   if ← runLane st "expire" 120000 (discard <| Expiry.expireDue st now) then ran := ran.push "expire"
   if ← runLane st "purge" 300000 (discard <| Expiry.purgeDue st now) then ran := ran.push "purge"
   if ← runLane st "stuck_sends" 60000 (discard <| Expiry.stuckSends st now) then ran := ran.push "stuck_sends"
+  -- the operator: accounts whose projection or provisioning did not reach the Worker yet
+  if st.config.isOperator then
+    if ← runLane st "pending_projection" 60000 (discard <| Operator.syncPending st) then ran := ran.push "pending_projection"
   -- the optional AI's triage (`Server.AI`), 20 new messages a tick while it is on
   -- (on its own thread for a Worker wake: up to 20 model calls)
   if ← AI.enabled st then

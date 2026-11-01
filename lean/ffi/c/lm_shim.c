@@ -18,6 +18,10 @@ Licensed under Apache-2.0; see LICENSE at the repository root.
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
 
 #if defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ == 4
 #error "LeanMail's shim supports 64-bit platforms only."
@@ -210,11 +214,21 @@ LM_API lean_obj_res lm_sqlite_version(lean_obj_arg u) {
 
 /* ---------- libcurl ---------- */
 
-typedef struct { unsigned char *data; size_t len, cap; } lm_buf;
+/* Response caps: a trusted endpoint (the Worker, R2, Gmail, Cloudflare) may answer up to 64 MiB
+   (a raw message is at most ~35 MB as Gmail's base64); a "safe" request (an untrusted URL: a
+   List-Unsubscribe target, a non-local AI endpoint) 16 MiB. Header lines: 200 either way. */
+#define LM_HTTP_MAX_BODY_TRUSTED ((size_t)64 * 1024 * 1024)
+#define LM_HTTP_MAX_BODY_SAFE ((size_t)16 * 1024 * 1024)
+#define LM_HTTP_MAX_HEADERS 200
+/* flags bit 0: the "safe" profile (https only, no redirects, no proxy, no private addresses). */
+#define LM_HTTP_SAFE 1u
+
+typedef struct { unsigned char *data; size_t len, cap, max; int over; } lm_buf;
 
 static size_t lm_buf_write(void *ptr, size_t size, size_t nmemb, void *ud) {
   lm_buf *b = (lm_buf *)ud;
   size_t n = size * nmemb;
+  if (b->len + n > b->max) { b->over = 1; return 0; }
   if (b->len + n > b->cap) {
     size_t cap = b->cap ? b->cap : 4096;
     while (cap < b->len + n) cap *= 2;
@@ -241,7 +255,7 @@ static size_t lm_src_read(char *ptr, size_t size, size_t nmemb, void *ud) {
 }
 
 /* Collect "Name: value" header lines (without CRLF) into a Lean Array String. */
-typedef struct { lean_object *arr; } lm_hdrs;
+typedef struct { lean_object *arr; size_t count; int over; } lm_hdrs;
 
 static size_t lm_hdr_write(char *ptr, size_t size, size_t nmemb, void *ud) {
   lm_hdrs *h = (lm_hdrs *)ud;
@@ -251,30 +265,105 @@ static size_t lm_hdr_write(char *ptr, size_t size, size_t nmemb, void *ud) {
   size_t end = n;
   while (end > 0 && (ptr[end - 1] == '\r' || ptr[end - 1] == '\n')) end--;
   if (end == 0) return n;
+  if (++h->count > LM_HTTP_MAX_HEADERS) { h->over = 1; return 0; }
   h->arr = lean_array_push(h->arr, lean_mk_string_from_bytes(ptr, end));
   return n;
 }
 
+/* Loopback, private, link-local, CGNAT, multicast, reserved and unspecified IPv4. */
+static int lm_v4_private(uint32_t a) {
+  uint8_t b0 = (uint8_t)(a >> 24), b1 = (uint8_t)(a >> 16), b2 = (uint8_t)(a >> 8);
+  if (b0 == 0 || b0 == 10 || b0 == 127) return 1;
+  if (b0 == 100 && (b1 & 0xC0) == 64) return 1;          /* 100.64.0.0/10 CGNAT */
+  if (b0 == 169 && b1 == 254) return 1;                    /* link-local */
+  if (b0 == 172 && (b1 & 0xF0) == 16) return 1;            /* 172.16.0.0/12 */
+  if (b0 == 192 && b1 == 168) return 1;
+  if (b0 == 192 && b1 == 0 && b2 == 0) return 1;           /* 192.0.0.0/24 */
+  if (b0 == 198 && (b1 & 0xFE) == 18) return 1;            /* 198.18.0.0/15 benchmarking */
+  if (b0 >= 224) return 1;                                 /* multicast, reserved, broadcast */
+  return 0;
+}
+
+static int lm_addr_private(const struct sockaddr *sa) {
+  if (sa->sa_family == AF_INET) {
+    const struct sockaddr_in *v4 = (const struct sockaddr_in *)sa;
+    return lm_v4_private(ntohl(v4->sin_addr.s_addr));
+  }
+  if (sa->sa_family == AF_INET6) {
+    const unsigned char *x = ((const struct sockaddr_in6 *)sa)->sin6_addr.s6_addr;
+    static const unsigned char zero10[10] = {0};
+    int lead_zero = memcmp(x, zero10, 10) == 0;
+    /* ::ffff:a.b.c.d (mapped) and ::a.b.c.d (compatible): the IPv4 rules */
+    if (lead_zero && ((x[10] == 0xff && x[11] == 0xff) || (x[10] == 0 && x[11] == 0))) {
+      uint32_t a = ((uint32_t)x[12] << 24) | ((uint32_t)x[13] << 16) | ((uint32_t)x[14] << 8) | x[15];
+      if (x[10] == 0 && x[11] == 0 && a <= 1) return 1;   /* :: and ::1 */
+      return lm_v4_private(a);
+    }
+    /* 64:ff9b::/96 NAT64: the embedded IPv4 */
+    if (x[0] == 0x00 && x[1] == 0x64 && x[2] == 0xff && x[3] == 0x9b) {
+      static const unsigned char z8[8] = {0};
+      if (memcmp(x + 4, z8, 8) == 0) {
+        uint32_t a = ((uint32_t)x[12] << 24) | ((uint32_t)x[13] << 16) | ((uint32_t)x[14] << 8) | x[15];
+        return lm_v4_private(a);
+      }
+    }
+    if ((x[0] & 0xFE) == 0xFC) return 1;                   /* fc00::/7 unique local */
+    if (x[0] == 0xFE && (x[1] & 0xC0) == 0x80) return 1;   /* fe80::/10 link-local */
+    if (x[0] == 0xFE && (x[1] & 0xC0) == 0xC0) return 1;   /* fec0::/10 site-local */
+    if (x[0] == 0xFF) return 1;                            /* multicast */
+    if (x[0] == 0x20 && x[1] == 0x01 && x[2] == 0x0d && x[3] == 0xb8) return 1; /* documentation */
+    return 0;
+  }
+  return 1; /* anything else (unix sockets, …) is never a public address */
+}
+
+typedef struct { int blocked; } lm_sock_ctx;
+
+/* The safe profile's socket opener: refuse to connect to a non-public address, whatever name
+   resolved to it (so DNS rebinding cannot reach the container's own network). */
+static curl_socket_t lm_open_socket(void *clientp, curlsocktype purpose, struct curl_sockaddr *addr) {
+  lm_sock_ctx *x = (lm_sock_ctx *)clientp;
+  if (purpose != CURLSOCKTYPE_IPCXN || lm_addr_private(&addr->addr)) {
+    x->blocked = 1;
+    return CURL_SOCKET_BAD;
+  }
+  return socket(addr->family, addr->socktype, addr->protocol);
+}
+
 static int lm_curl_ready = 0;
 
-/*
-request : (method url : String) → (headers : Array String) → (body : ByteArray) → (timeoutMs : UInt32)
-        → IO RawResponse
-RawResponse is a Lean structure declared as (headers : Array String) (body : ByteArray) (status : UInt32):
-two object fields then one 4-byte scalar.
-*/
-LM_API lean_obj_res lm_http_request(b_lean_obj_arg method, b_lean_obj_arg url, b_lean_obj_arg headers,
-                                    b_lean_obj_arg body, uint32_t timeout_ms, lean_obj_arg w) {
-  (void)w;
+static void lm_curl_init_once(void) {
   if (!lm_curl_ready) {
     curl_global_init(CURL_GLOBAL_DEFAULT);
     lm_curl_ready = 1;
   }
+}
+
+/* init : IO Unit — curl_global_init, once, at startup (before any thread makes a request). */
+LM_API lean_obj_res lm_http_init(lean_obj_arg w) {
+  (void)w;
+  lm_curl_init_once();
+  return lean_io_result_mk_ok(lean_box(0));
+}
+
+/*
+request : (method url : String) → (headers : Array String) → (body : ByteArray) → (timeoutMs : UInt32)
+        → (flags : UInt32) → IO RawResponse
+RawResponse is a Lean structure declared as (headers : Array String) (body : ByteArray) (status : UInt32):
+two object fields then one 4-byte scalar.
+*/
+LM_API lean_obj_res lm_http_request(b_lean_obj_arg method, b_lean_obj_arg url, b_lean_obj_arg headers,
+                                    b_lean_obj_arg body, uint32_t timeout_ms, uint32_t flags, lean_obj_arg w) {
+  (void)w;
+  /* the CLI never calls lm_http_init: the first request does it */
+  lm_curl_init_once();
+  int safe = (flags & LM_HTTP_SAFE) != 0;
   CURL *c = curl_easy_init();
   if (!c) return lm_io_error("curl init failed");
 
-  lm_buf out = {0, 0, 0};
-  lm_hdrs hdrs = { lean_mk_empty_array() };
+  lm_buf out = {0, 0, 0, safe ? LM_HTTP_MAX_BODY_SAFE : LM_HTTP_MAX_BODY_TRUSTED, 0};
+  lm_hdrs hdrs = { lean_mk_empty_array(), 0, 0 };
+  lm_sock_ctx sock = { 0 };
   lm_src src = { (const unsigned char *)lean_sarray_cptr(body), lean_sarray_size(body), 0 };
   struct curl_slist *list = NULL;
   size_t nh = lean_array_size(headers);
@@ -298,7 +387,17 @@ LM_API lean_obj_res lm_http_request(b_lean_obj_arg method, b_lean_obj_arg url, b
   curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 0L);
   curl_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
   curl_easy_setopt(c, CURLOPT_USERAGENT, "leanmail/0.1");
-  curl_easy_setopt(c, CURLOPT_PROTOCOLS_STR, "http,https");
+  curl_easy_setopt(c, CURLOPT_MAXFILESIZE_LARGE, (curl_off_t)out.max);
+  if (safe) {
+    curl_easy_setopt(c, CURLOPT_PROTOCOLS_STR, "https");
+    curl_easy_setopt(c, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+    /* no proxy from the environment: the address checked must be the one connected to */
+    curl_easy_setopt(c, CURLOPT_PROXY, "");
+    curl_easy_setopt(c, CURLOPT_OPENSOCKETFUNCTION, lm_open_socket);
+    curl_easy_setopt(c, CURLOPT_OPENSOCKETDATA, &sock);
+  } else {
+    curl_easy_setopt(c, CURLOPT_PROTOCOLS_STR, "http,https");
+  }
   if (strcmp(m, "HEAD") == 0) curl_easy_setopt(c, CURLOPT_NOBODY, 1L);
   if (src.len > 0 || strcmp(m, "POST") == 0 || strcmp(m, "PUT") == 0 || strcmp(m, "PATCH") == 0) {
     curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);
@@ -311,7 +410,11 @@ LM_API lean_obj_res lm_http_request(b_lean_obj_arg method, b_lean_obj_arg url, b
   CURLcode rc = curl_easy_perform(c);
   lean_obj_res result;
   if (rc != CURLE_OK) {
-    result = lm_io_error_prefixed("http", curl_easy_strerror(rc));
+    const char *why = sock.blocked ? "blocked: not a public address"
+                    : out.over || rc == CURLE_FILESIZE_EXCEEDED ? "response too large"
+                    : hdrs.over ? "too many response headers"
+                    : curl_easy_strerror(rc);
+    result = lm_io_error_prefixed("http", why);
     lean_dec(hdrs.arr);
   } else {
     long status = 0;

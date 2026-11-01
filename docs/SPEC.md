@@ -2,14 +2,14 @@
 
 Generated 2026-11-01 (UTC) by `scripts/spec.sh` from the test suites. Do not edit by hand.
 
-1433 passing checks: core-test 64, address-test 103, ical-test 666, junk-test 117, server-test 393, worker 73, cli-smoke 17.
+1493 passing checks: core-test 67, address-test 103, ical-test 666, junk-test 117, server-test 421, worker 102, cli-smoke 17.
 
 Each bullet is the name of a check that passed, in the order its suite runs it. To change
 this file, change the tests and run `make spec`; CI fails when it is out of date.
 
 ## core-test
 
-`lean/test`, run as `lake build core-test && ./.lake/build/bin/core-test`; 64 checks.
+`lean/test`, run as `lake build core-test && ./.lake/build/bin/core-test`; 67 checks.
 
 - a header line splits into a trimmed name and value
 - a header value keeps colons after the first
@@ -75,6 +75,9 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - an inlined message (mixed-both) gets postal-mime's html header block
 - an inlined message (group-html) gets postal-mime's text header block
 - an inlined message (group-html) gets postal-mime's html header block
+- a message nested 2,000 multipart levels deep parses in under a second, capped at 32 levels, as an opaque leaf
+- a message nested a few levels still yields its innermost text
+- a message of 3,000 parts keeps at most 1,000 nodes; the rest is one opaque body, not an attachment
 
 ## address-test
 
@@ -979,7 +982,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 
 ## server-test
 
-`lean/test`, run as `lake build server-test && ./.lake/build/bin/server-test`; 393 checks.
+`lean/test`, run as `lake build server-test && ./.lake/build/bin/server-test`; 421 checks.
 
 - sha256 of 'abc' matches the FIPS vector
 - hmac-sha256 matches RFC 4231 test case 2
@@ -1070,7 +1073,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - provisioning creates the account once and mails one welcome link
 - a magic link for an unknown email is 202 and sends nothing
 - a magic link for the account's email sends one mail with the link and the code
-- the mail has RFC 5322 headers and a ULID Message-ID
+- sec: sign-in mail goes to /internal/email/signin {to, kind, link, code}: no From, no raw message, the link on PUBLIC_ORIGIN
 - a link with a bad MAC does not sign in
 - GET /auth/magic redirects to / with an HttpOnly Secure Lax session cookie
 - a magic link works once
@@ -1087,7 +1090,8 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - a revoked API token stops working
 - POST /auth/code with the right code yields an lm1 token that reads mail
 - a code works once
-- five wrong codes burn the link: the right code and the link then fail
+- sec: five wrong codes lock that link's code, but never spend the link itself
+- sec: at most three live magic links; a request beyond that is 202 and mails nothing
 - GET /api/sessions lists the current session
 - a cookie logout without the CSRF headers is 403
 - logout clears the cookie and revokes the session
@@ -1102,6 +1106,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - a sign-up from ADMIN_EMAILS is approved at once as an admin
 - /admin/* refuses a non-admin account and a missing internal secret
 - GET /admin/signups lists the pending sign-up
+- sec: an /admin mutation needs Origin = PUBLIC_ORIGIN and X-Requested-With: LeanMail; a GET needs neither
 - approve activates, projects the account to /internal/accounts and wakes it with a provision
 - approval is audited with the admin as actor
 - signing up again once active is a silent 202
@@ -1111,6 +1116,8 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - SIGNUP_MODE=closed answers 404
 - SIGNUP_MODE=open approves at once, projects and provisions
 - sign-ups are limited to 10 an hour per IP
+- sec: a sign-up never re-activates a disabled account, and auto-approves only a new one (not a pending one)
+- sec: a failed projection or provisioning is recorded and retried by a repeat sign-up and the pending_projection lane
 - the dev bypass is an admin on a bare operator
 - the HTML builder escapes text and attributes and leaves void elements open
 - /inbox lists the fixture subjects with links, under <title>LeanMail · Inbox</title>
@@ -1137,6 +1144,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - every HTML page carries the CSP, Referrer-Policy and nosniff (9 pages)
 - without a session /inbox redirects a browser to /signin (302), and other clients get 401
 - a cookie form post needs Origin = PUBLIC_ORIGIN or Sec-Fetch-Site: same-origin
+- sec: Origin: null passes the form rule only with Sec-Fetch-Site: same-origin; pages send Referrer-Policy: same-origin
 - the session cookie opens /inbox
 - POST /signin mails the account's address only and always shows the code form
 - the 6-digit code form signs the browser in with a session cookie
@@ -1156,6 +1164,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - caps: 21 recipients is 400, 11 attachments is 400, over 3 MiB of attachments is 413
 - reply_of sets In-Reply-To and References from the parent and threads the Sent copy with it
 - an unsendable from is 403; a sending domain, a can_send address and default_from are allowed
+- sec: MAIL_FROM is refused as a From for everyone, and PATCH /api/account default_from must be sendable
 - PUT /api/drafts/:id creates at revision 1 with a send_id; a repeated mutation_id is idempotent
 - draft CAS: a stale or missing revision is 409 {error:revision, revision}; the right one bumps it
 - GET /api/drafts lists the draft; GET /api/drafts/:id has its content and attachment data
@@ -1307,9 +1316,9 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - m6b: tools/list is the CLI's tool list, with schemas and annotations
 - m6b: a batch is -32600, an unknown method -32601, an unknown tool -32602, bad JSON -32700
 - m6b: GET /mcp is 405; no token 401; a token without read 403; a foreign Origin only matters without a bearer; a bad protocol header 400
-- m6b: search_mail round trip finds the thread and withholds the privileged hit
+- m6b: search_mail round trip finds the thread and leaves out the privileged hit, id and all (counted in withheld)
 - m6b: get_message answers the message without raw_key; a privileged one is {id, withheld}
-- m6b: recent_mail lists the inbox with the privileged entry withheld; a bad filter is an error
+- m6b: recent_mail lists the inbox without the privileged entry (counted in withheld); a bad filter is an error
 - m6b: account_status reports health, the account and the privileged counts
 - m6b: a read token cannot mark_done (isError, insufficient scope), save_draft or send_draft
 - m6b: an act token marks done and snoozes through the tools
@@ -1320,7 +1329,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - m6b: the ai lane triages new mail into ai_triage and skips the privileged message
 - m6b: the AI request is POST {base}/chat/completions, bearer key, temperature 0, system + user
 - m6b: a second tick triages nothing new
-- m6b: the list item carries triage {label, priority}; untriaged mail has none
+- m6b: the list item carries triage {label, priority}; the privileged message is not in a token's list at all
 - m6b: the inbox renders the triage chip
 - m6b: a thread summary is {summary, model, at}, cached: the second call makes no AI request
 - m6b: ?refresh=1 asks again; a privileged thread is refused 403 without an AI request
@@ -1374,16 +1383,38 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - m9b: with SIGNUP_MODE=closed the page says so and has no form
 - m9b: the sign-up form posted to the operator queues the sign-up and redirects to the thanks page
 - m9b: an account container takes no sign-ups
+- sec: /%69nternal/health, //internal/health, /internal//health and other path tricks are refused before routing
+- sec: x-lm-public (a client request the Worker forwarded) is never internal, even with the right secret
+- sec: routing: an account adds only granted domains (GET /internal/grants), fails closed, the operator any
+- sec: routing: the plan reads and changes only granted zones and never lists other zones or destinations
+- sec: routing: an account container without CF_API_TOKEN answers plan and apply 503 routing_needs_operator
+- sec: routing: an account container's plan is made by the operator through the Worker, for its granted domains only
+- sec: routing: apply goes through the operator with its token, and the account keeps routing.last_apply
+- sec: routing: the operator refuses a domain not granted to the routing account (403), no account (400), a client (401)
+- sec: a token gets a privileged message as {id, withheld}; its raw, HTML and attachments are 403 privileged
+- sec: a token's lists, search and threads leave privileged mail out
+- sec: a session keeps full access to privileged mail
+- sec: a token may not forward or reply to privileged mail (send and draft save are 403 privileged); a session may
+- sec: message HTML is sandboxed with no remote images, forms or base; ?images=1 adds https: to img-src
+- sec: /raw is an attachment <id>.eml under a sandbox CSP
+- sec: a one-click unsubscribe URL must be https with a DNS name: no userinfo, fragment, backslash or address literal
+- sec: the one-click POST is made under the safe profile; a URL that fails the strict parse is left to the reader
+- sec: the safe profile never connects to loopback, private, link-local, CGNAT or mapped IPv6 addresses, nor over http
+- sec: a URL or header value with CR, LF or NUL is refused before libcurl
+- /signin?sent=1 shows the check-your-mail notice and the code form for the address
+- an unknown path is the HTML 404 page for a browser (framed when signed in) and JSON for everyone else
+- GET /favicon.ico is 204 with a day of caching, never a 401 or 404
+- sec: outside a bare localhost run the server refuses to boot with the default SESSION_SECRET or an empty INTERNAL_SECRET
 
 ## worker
 
-`worker/test`, run as `npm test` (vitest in the Workers pool); 73 tests.
+`worker/test`, run as `npm test` (vitest in the Workers pool); 102 tests.
 
 ### test/auth.test.ts
 
 - stampHeaders (MailContainer.proxy) › drops client x-account-id, x-internal-secret and every x-admin-*, then sets its own
-- item 1: /internal/email/send from MAIL_FROM › defaults MAIL_FROM to no-reply@<host of PUBLIC_ORIGIN>, as the container does
-- item 1: /internal/email/send from MAIL_FROM › lets any authenticated container send as MAIL_FROM with no route; other From still need one
+- /internal/email/send and MAIL_FROM › defaults MAIL_FROM to no-reply@<host of PUBLIC_ORIGIN>, as the container does
+- /internal/email/send and MAIL_FROM › an account may no longer send as MAIL_FROM through /internal/email/send; the operator still may
 - item 3: PUT /internal/accounts replace_domains_for › drops the account's unlisted domains, leaves others' alone, and keeps has_gmail when absent
 - item 4: POST /internal/wake/:acct {provision} › proxies POST /internal/provision to the account and returns its reply; no body is a plain wake
 - item 5: public auth routes › POST /auth/signup goes to the operator with cf-connecting-ip, and nothing client-stamped
@@ -1431,6 +1462,38 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - google oauth callback › refuses a forged state, a magic-link-shaped token and one signed for another account
 - X-Next-Wake › is whole seconds clamped to a minute .. a day
 
+### test/hardening.test.ts
+
+- 1: Cloudflare credentials, /internal/grants, /internal/routing/* › varsFor gives CF_API_TOKEN and CF_ACCOUNT_ID to _operator only
+- 1: Cloudflare credentials, /internal/grants, /internal/routing/* › GET /internal/grants answers the caller's own domains, sorted, behind its secret
+- 1: Cloudflare credentials, /internal/grants, /internal/routing/* › POST /internal/routing/{plan,apply} go to the operator with the caller's body and x-routing-account
+- 1: Cloudflare credentials, /internal/grants, /internal/routing/* › callContainer is an internal call, and carries the routing account to the DO
+- 1: Cloudflare credentials, /internal/grants, /internal/routing/* › stampHeaders sets x-routing-account only on an internal call, never from the client
+- 2: x-lm-public and path canonicalisation › canonicalPath decodes once, collapses slashes, resolves dot segments, and refuses the rest
+- 2: x-lm-public and path canonicalisation › fetch() 404s client paths that only canonicalise to /internal/*, before any container
+- 2: x-lm-public and path canonicalisation › fetch() routes, and forwards, the canonical path
+- 2: x-lm-public and path canonicalisation › MailContainer.proxy marks client requests public, strips a client's mark, and refuses /internal/* for them
+- 2: x-lm-public and path canonicalisation › the health check and the scheduled wake are internal calls
+- 3: /internal/email/signin and the From: header › headerFrom reads the one From: of the header block
+- 3: /internal/email/signin and the From: header › /internal/email/send needs the raw's From: to be the envelope from, for every caller
+- 3: /internal/email/signin and the From: header › sends the Worker's own sign-in mail to the caller's account email, from MAIL_FROM
+- 3: /internal/email/signin and the From: header › refuses another address, a foreign or malformed link, a bad code or kind
+- 3: /internal/email/signin and the From: header › is limited to 20 an hour per account, and a send failure is a 502
+- 3: /internal/email/signin and the From: header › signinMessage writes a plain-text message with From, To, Subject, Date and Message-ID
+- 4: forward-only loop guard and breaker › refuses looped or bulk mail without forwarding it
+- 4: forward-only loop guard and breaker › counts against the breaker, and once it trips fails temporarily without forwarding
+- 5: non-GET /admin/* › needs Origin = PUBLIC_ORIGIN and X-Requested-With: LeanMail
+- 6: IPv6 /64 rate limit › ipv6Net64 expands and truncates IPv6, and ignores IPv4
+- 6: IPv6 /64 rate limit › limits a whole /64 to 10 an hour, across its addresses; other networks and IPv4 count apart
+- 6: IPv6 /64 rate limit › applies to /auth/login and the code routes through fetch()
+- 7: malformed escapes are a 400, never a throw › in the Gmail hook and /internal/wake/:acct
+- 8: WORKER_ORIGIN under wrangler dev › is host.docker.internal for a localhost PUBLIC_ORIGIN, keeping the port; PUBLIC_ORIGIN as is
+- 8: WORKER_ORIGIN under wrangler dev › tests and wrangler dev take PUBLIC_ORIGIN from .dev.vars, not production's
+- 10: start, wait, and retry once › sendRetryingOnce resends the whole request once after a dropped connection
+- 10: start, wait, and retry once › does not retry twice, nor on another 500 (whose body is kept), nor when told not to
+- 10: start, wait, and retry once › retries only what it can afford to copy
+- 10: start, wait, and retry once › proxy() waits for the port before the first request, and retries a dropped first connection
+
 ### test/internal.test.ts
 
 - internal auth › 401s without, or with a wrong, secret, and when INTERNAL_SECRET is unset
@@ -1448,7 +1511,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - tokens › verifyMac round-trips v1 and lm1 tokens and rejects tampering
 - tokens › verifies under the key derived for the account the token names, never the master
 - tokens › the DO's env carries neither master secret
-- tokens › passes the Cloudflare, AI and log settings through when set, and nothing when not
+- tokens › passes the AI and log settings through when set, and nothing when not; the Cloudflare token to _operator only
 - tokens › asks for DEV_AUTH_BYPASS only when DEV_ACCOUNT is set
 - tokens › tests run on the vitest bindings, not .dev.vars
 - tokens › accountFromRequest reads the cookie, then the bearer

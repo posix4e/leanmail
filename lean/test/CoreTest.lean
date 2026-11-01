@@ -158,6 +158,44 @@ def typedFields (t : IO.Ref Tally) : IO Unit := do
   check t "the old accessors still read the same fields" <|
     m.subject == m.subject? && m.messageId == m.messageId? && m.date == some "Sun, 13 Sep 2026 14:32:12 +0000"
 
+/-! ## MIME caps: hostile structure stays linear -/
+
+def nested (levels : Nat) : String := Id.run do
+  let mut out := "From: a@b.test\r\nSubject: deep\r\n"
+  for i in [0:levels] do
+    out := out ++ s!"Content-Type: multipart/mixed; boundary=\"b{i}\"\r\n\r\n--b{i}\r\n"
+  out := out ++ "Content-Type: text/plain\r\n\r\ninnermost\r\n"
+  for i' in [0:levels] do
+    out := out ++ s!"--b{levels - 1 - i'}--\r\n"
+  return out
+
+def wide (parts : Nat) : String := Id.run do
+  let mut out := "From: a@b.test\r\nContent-Type: multipart/mixed; boundary=\"w\"\r\n\r\n"
+  for i in [0:parts] do
+    out := out ++ s!"--w\r\nContent-Type: application/pdf; name=\"f{i}.pdf\"\r\nContent-Disposition: attachment\r\n\r\nx{i}\r\n"
+  return out ++ "--w--\r\n"
+
+def mimeCaps (t : IO.Ref Tally) : IO Unit := do
+  let deep := (nested 2000).toUTF8
+  let t0 ← IO.monoMsNow
+  let m := Core.Mime.parse deep
+  let tree := Core.Mime.Parse.parseTree deep
+  let ms := (← IO.monoMsNow) - t0
+  let depth := (tree.map fun tr => tr.nodes.foldl (fun d n => max d n.depth) 0).getD 0
+  check t "a message nested 2,000 multipart levels deep parses in under a second, capped at 32 levels, as an opaque leaf" <|
+    ms < 1000 && depth ≤ Core.Mime.Parse.maxDepth + 1 && m.attachments.isEmpty && m.text.isNone &&
+      (tree.map fun tr => tr.nodes.any (·.sealed)) == some true
+  let shallow := Core.Mime.parse (nested 3).toUTF8
+  check t "a message nested a few levels still yields its innermost text" (shallow.text == some "innermost\n")
+  let w := wide 3000
+  let t1 ← IO.monoMsNow
+  let mw := Core.Mime.parse w.toUTF8
+  let msw := (← IO.monoMsNow) - t1
+  let tw := Core.Mime.Parse.parseTree w.toUTF8
+  check t "a message of 3,000 parts keeps at most 1,000 nodes; the rest is one opaque body, not an attachment" <|
+    (tw.map (·.nodes.size)) == some Core.Mime.Parse.maxParts && mw.attachments.size < Core.Mime.Parse.maxParts &&
+      mw.attachments.size ≥ 990 && mw.attachments.all (·.mimeType == "application/pdf") && msw < 5000
+
 def main (_ : List String) : IO UInt32 := do
   let t ← IO.mkRef ({} : Tally)
   check t "a header line splits into a trimmed name and value" <|
@@ -194,6 +232,7 @@ def main (_ : List String) : IO UInt32 := do
   mimeVectors t
   typedFields t
   rfc822Blocks t
+  mimeCaps t
   let r ← t.get
   IO.println s!"{r.passed} passed, {r.failed} failed"
   return if r.failed == 0 then 0 else 1

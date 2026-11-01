@@ -11,12 +11,24 @@ A port of postal-mime's line reader and `MimeNode`: the message is cut into line
 line loses its trailing CR/LF run), a line starting with `--` is checked against the registered
 boundaries (the most recently registered first), and every other line is fed to the current node,
 first as a header line and, after the empty line, to the node's transfer decoder. Nodes live in one
-array and refer to each other by index; node 0 is the root. -/
+array and refer to each other by index; node 0 is the root.
+
+Two caps keep a hostile message linear (postal-mime has neither): multipart nesting stops at
+`maxDepth` and the tree at `maxParts` nodes. A multipart part past the depth, or the part that
+would pass the count, becomes one opaque `application/octet-stream` leaf that takes the rest of
+its content (`Node.sealed`); `Core.Mime` makes neither text nor an attachment of it. Since only
+the open ancestors' boundaries are registered, a `--` line is checked against at most `maxDepth`
+of them. Nothing here throws. -/
 
 open Core.Text Str
 
 inductive State | header | body | finished
   deriving BEq, Inhabited
+
+/-- Multipart levels kept; a multipart part deeper than this is opaque. -/
+def maxDepth : Nat := 32
+/-- Nodes kept in one tree; past this the rest of the message is one opaque node. -/
+def maxParts : Nat := 1000
 
 /-- The transfer decoders: base64, quoted-printable, and pass-through for everything else. -/
 inductive Decoder | base64 | qp | pass
@@ -53,6 +65,8 @@ structure Node where
   pending : ByteArray := .empty
   /-- The decoded body, set when the node is finalized. -/
   content : Option ByteArray := none
+  /-- Past a cap (`maxDepth`, `maxParts`): the rest of the content, kept undecoded and unparsed. -/
+  sealed : Bool := false
   deriving Inhabited
 
 structure Tree where
@@ -60,6 +74,8 @@ structure Tree where
   /-- Registered boundaries (UTF-8 bytes) and the multipart node they belong to. -/
   boundaries : Array (ByteArray × Nat) := #[]
   current : Nat := 0
+  /-- `maxParts` was reached: no more boundaries are matched, every line goes to the current node. -/
+  capped : Bool := false
   deriving Inhabited
 
 namespace Tree
@@ -90,15 +106,22 @@ def processHeaders (t : Tree) (i : Nat) : Tree := Id.run do
       else if k == "content-disposition" then cd := h.value
       else if k == "content-id" then cid := some h.value
       else desc := some h.value
-  let parsed := Header.parseStructured ct
-  let multipart :=
+  let mut parsed := Header.parseStructured ct
+  let mut multipart :=
     if parsed.value.toLower.startsWith "multipart/" then
       some (String.ofList (parsed.value.toList.drop 10))
     else none
+  -- too deep, or too many parts: an opaque leaf, its boundary never registered
+  let sealed := multipart.isSome && (n.depth ≥ maxDepth || t.nodes.size ≥ maxParts)
+  if sealed then
+    ct := "application/octet-stream"
+    parsed := Header.parseStructured ct
+    multipart := none
   let encoding := Header.encodingToken cte
   let lower := encoding.toLower
   let decoder :=
-    if (lower.splitOn "base64").length > 1 then Decoder.base64
+    if sealed then Decoder.pass
+    else if (lower.splitOn "base64").length > 1 then Decoder.base64
     else if (lower.splitOn "quoted-printable").length > 1 then Decoder.qp
     else Decoder.pass
   let mut t := t.modifyNode i fun n => { n with
@@ -106,7 +129,7 @@ def processHeaders (t : Tree) (i : Nat) : Tree := Id.run do
     transferEncodingRaw := cte, transferEncoding := encoding,
     dispositionRaw := cd, disposition := Header.parseStructured cd,
     contentId := cid, contentDescription := desc,
-    processed := true, decoder, headerLines := #[] }
+    processed := true, decoder, headerLines := #[], sealed }
   if multipart.isSome then
     let b := parsed.param "boundary"
     if !b.isEmpty then
@@ -234,7 +257,7 @@ private def delimiter? (line b : ByteArray) : Option Bool := Id.run do
   return some term
 
 def processLine (t : Tree) (line : ByteArray) : Tree := Id.run do
-  if !t.boundaries.isEmpty && line.size > 2 && line[0]! == 45 && line[1]! == 45 then
+  if !t.capped && !t.boundaries.isEmpty && line.size > 2 && line[0]! == 45 && line[1]! == 45 then
     let mut k := t.boundaries.size
     while k > 0 do
       k := k - 1
@@ -247,6 +270,15 @@ def processLine (t : Tree) (line : ByteArray) : Tree := Id.run do
       | some false =>
         let t := t.finalizeChildNodes owner
         let o := t.node owner
+        if t.nodes.size + 1 ≥ maxParts then
+          -- the last node this tree gets: everything after this line, unparsed
+          let child : Node := {
+            parent := some owner, depth := o.depth + 1, state := .body, processed := true, sealed := true,
+            contentTypeRaw := "application/octet-stream", contentType := Header.parseStructured "application/octet-stream" }
+          let idx := t.nodes.size
+          let t := { t with nodes := t.nodes.push child, capped := true }
+          let t := t.modifyNode owner fun o => { o with children := o.children.push idx }
+          return { t with current := idx }
         let parentType := o.multipart
         let child : Node := {
           parent := some owner, depth := o.depth + 1,

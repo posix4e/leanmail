@@ -5,6 +5,7 @@ import { accountByEmail, normAddress } from "./routes";
 import { ACCOUNT_RE, accountFromRequest, b64uDecode, b64uEncode, bytesEqual, deriveSecret, verifyMac } from "./tokens";
 import { callContainer, containerFor } from "./wake";
 import type { StampOptions } from "./container";
+import { HOUR_MS, ipv6Net64, overLimit, sha256Hex } from "./rate";
 
 /**
  * The public sign-in routes the Worker answers before any credential exists, per the contract at
@@ -25,7 +26,9 @@ import type { StampOptions } from "./container";
  *   POST /signin/code        → the same for the web form's 6-digit code
  *   /admin/*                 → MAC-verified lm_session cookie required; a browser navigation goes
  *                              to the cookie's account (the page shell), anything else to the
- *                              operator with x-admin-account: <cookie's account>
+ *                              operator with x-admin-account: <cookie's account>; anything but
+ *                              GET/HEAD also needs Origin = PUBLIC_ORIGIN and
+ *                              X-Requested-With: LeanMail (else 403)
  *
  * Passkey login (lean/Server/Auth/Passkey.lean). The challenge is `v1.<rand>.<exp>.<mac>` with
  * mac = base64url(HMAC-SHA256(deriveSecret(master SESSION_SECRET, "passkey:challenge"),
@@ -41,14 +44,14 @@ import type { StampOptions } from "./container";
  * The container then checks the voucher, the origin, the signature and the sign count, spends the
  * challenge once, and starts the session.
  *
- * Rate limit: /auth/login and the two code routes, 10 an hour per cf-connecting-ip, in D1
- * (`auth_rate`), so every isolate shares one count (passkey logins likewise, in their own bucket); an in-memory map would reset per isolate and
- * not hold across Cloudflare's many. Without cf-connecting-ip (wrangler dev) all clients share one
- * bucket.
+ * Rate limit: /auth/login and the two code routes, 10 an hour per cf-connecting-ip and, for an
+ * IPv6 client, 10 an hour per its /64 too (one host can hold a whole /64), in D1 (`auth_rate`), so
+ * every isolate shares one count (passkey logins likewise, in their own bucket); an in-memory map
+ * would reset per isolate and not hold across Cloudflare's many. Without cf-connecting-ip
+ * (wrangler dev) all clients share one bucket.
  */
 
 export const AUTH_RATE_PER_HOUR = 10;
-const HOUR_MS = 3_600_000;
 const MAX_FORM = 16 * 1024;
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
@@ -84,31 +87,33 @@ export async function proxyTo(env: Env, acct: string, request: Request, opts: St
   }
 }
 
-async function sha256Hex(s: string): Promise<string> {
-  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
-  return [...d].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-/** Count one attempt for this client in `bucket`; true once the hour holds more than the limit. */
+/**
+ * Count one attempt for this client in `bucket` (keys `<bucket>:<sha256 of the IP>` and, for
+ * IPv6, `<bucket>:net:<sha256 of its /64>`); true once either window holds more than the limit.
+ */
 export async function rateLimited(db: D1Database, bucket: string, request: Request, now: number = Date.now()): Promise<boolean> {
   const ip = request.headers.get("cf-connecting-ip") ?? "";
-  const key = `${bucket}:${await sha256Hex(ip)}`;
-  const row = await db
-    .prepare(
-      `INSERT INTO auth_rate (key, window_start, count) VALUES (?1, ?2, 1)
-       ON CONFLICT(key) DO UPDATE SET
-         count = CASE WHEN ?2 - window_start >= ${HOUR_MS} THEN 1 ELSE count + 1 END,
-         window_start = CASE WHEN ?2 - window_start >= ${HOUR_MS} THEN ?2 ELSE window_start END
-       RETURNING count`,
-    )
-    .bind(key, now)
-    .first<{ count: number }>();
-  return (row?.count ?? 0) > AUTH_RATE_PER_HOUR;
+  const keys = [`${bucket}:${await sha256Hex(ip)}`];
+  const net = ipv6Net64(ip);
+  if (net) keys.push(`${bucket}:net:${await sha256Hex(net)}`);
+  return overLimit(db, keys, AUTH_RATE_PER_HOUR, now);
 }
 
 /** Forget rate windows that ended over an hour ago (daily cron). */
 export async function pruneAuthRate(db: D1Database, now: number = Date.now()): Promise<void> {
   await db.prepare("DELETE FROM auth_rate WHERE window_start < ?1").bind(now - HOUR_MS).run();
+}
+
+/** A state-changing /admin/* request from our own page script: same Origin, and our header. */
+export function adminWriteAllowed(request: Request, env: Env): boolean {
+  if (request.method === "GET" || request.method === "HEAD") return true;
+  let origin: string;
+  try {
+    origin = new URL(env.PUBLIC_ORIGIN).origin;
+  } catch {
+    return false;
+  }
+  return request.headers.get("origin") === origin && request.headers.get("x-requested-with") === "LeanMail";
 }
 
 function tooMany(): Response {
@@ -328,6 +333,10 @@ export async function handleAuth(request: Request, env: Env, ctx: ExecutionConte
     const acct = await accountFromRequest(request, env.SESSION_SECRET, { bearer: false });
     const nav = isNavigation(request);
     if (!acct) return nav ? toSignin() : json(401, { error: "unauthorized" });
+    if (!adminWriteAllowed(request, env)) {
+      log("auth.admin_refused", { method: m });
+      return json(403, { error: "forbidden" });
+    }
     // A browser navigation gets the page shell from the admin's own container; the shell's script
     // (and any API client) reaches the operator, which checks that `acct` is an admin.
     if (nav) return proxyTo(env, acct, request);

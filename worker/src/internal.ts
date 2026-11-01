@@ -5,6 +5,7 @@ import {
   MAILS,
   domainOf,
   domainsNotOwnedBy,
+  domainsOf,
   lookupRoute,
   normAddress,
   upsertAccounts,
@@ -15,7 +16,10 @@ import {
   type RouteInput,
 } from "./routes";
 import { pushPayload, sendApns, type ApnsConfig, type Device } from "./apns";
-import { ACCOUNT_RE, deriveInternalSecret, secretEqual } from "./tokens";
+import { safeDecode } from "./paths";
+import { overLimit } from "./rate";
+import { ACCOUNT_RE, deriveInternalSecret, secretEqual, verifyMac } from "./tokens";
+import { ulid as mintUlid } from "./ulid";
 import { callContainer, containerFor, wake as defaultWake, type WakeFn } from "./wake";
 
 /**
@@ -41,6 +45,7 @@ export interface InternalDeps {
   call: typeof callContainer;
   /** The APNs transport (apns.ts `sendApns`); injectable for tests. */
   sendApns: typeof sendApns;
+  now: () => number;
 }
 
 /** The address the install's own mail comes from: MAIL_FROM, else `no-reply@<host of PUBLIC_ORIGIN>`. */
@@ -110,6 +115,26 @@ function requireOperator(caller: string): void {
 
 // ---- POST /internal/email/send ----
 
+/**
+ * The address of the raw message's one `From:` header (the addr-spec in its last `<...>`, else the
+ * whole value), normalised; null when there is none, more than one, or it names several mailboxes.
+ */
+export function headerFrom(raw: Uint8Array): string | null {
+  const text = new TextDecoder().decode(raw.subarray(0, 256 * 1024));
+  const end = text.search(/\r?\n\r?\n/);
+  const head = (end < 0 ? text : text.slice(0, end)).replace(/\r?\n[ \t]+/g, " ");
+  const values: string[] = [];
+  for (const line of head.split(/\r?\n/)) {
+    const m = /^([!-9;-~]+):(.*)$/.exec(line);
+    if (m && m[1]!.toLowerCase() === "from") values.push(m[2]!);
+  }
+  if (values.length !== 1) return null;
+  const v = values[0]!.trim();
+  const angle = /<([^<>]*)>\s*$/.exec(v);
+  const addr = normAddress(angle ? angle[1]! : v);
+  return isAddress(addr) ? addr : null;
+}
+
 async function emailSend(request: Request, env: Env, caller: string): Promise<Response> {
   const body = await readJson(request);
   const { from, to, raw_b64 } = body;
@@ -118,9 +143,14 @@ async function emailSend(request: Request, env: Env, caller: string): Promise<Re
   if (typeof raw_b64 !== "string" || raw_b64.length === 0) throw new HttpError(400, "bad_raw_b64");
   const raw = decodeB64(raw_b64);
   if (raw.byteLength > MAX_SEND_BYTES) throw new HttpError(413, "too_large");
-  // An account sends only as an address it owns and may send from, or as the install's MAIL_FROM
-  // (its sign-in and welcome mail). The operator may send as anything.
-  if (caller !== OPERATOR && normAddress(from) !== mailFrom(env)) {
+  // The message says it is from the envelope's sender, for every caller.
+  const shown = headerFrom(raw);
+  if (shown === null) throw new HttpError(400, "bad_header_from");
+  if (shown !== normAddress(from)) throw new HttpError(403, "header_from_mismatch");
+  // An account sends only as an address it owns and may send from; the install's MAIL_FROM is not
+  // one (its sign-in and welcome mail go through /internal/email/signin, which the Worker writes).
+  // The operator may send as anything.
+  if (caller !== OPERATOR) {
     const route = await lookupRoute(env.DB, from);
     if (!route || route.account_id !== caller || !route.can_send) throw new HttpError(403, "from_not_allowed");
   }
@@ -139,6 +169,97 @@ async function emailSend(request: Request, env: Env, caller: string): Promise<Re
   log("internal.email_send", { acct: caller, sent, failed: failed.length, size: raw.byteLength });
   if (failed.length) return json(502, { ok: false, sent, failed });
   return json(200, { ok: true, sent });
+}
+
+// ---- POST /internal/email/signin ----
+
+export const SIGNIN_MAIL_PER_HOUR = 20;
+const CODE_RE = /^\d{6}$/;
+const LINK_MAX = 900;
+const LINK_TOKEN_RE = /^[A-Za-z0-9._~%-]+$/;
+
+export type SigninKind = "signin" | "welcome";
+
+/** The sign-in (or welcome) message the Worker writes itself: plain text, 7-bit, CRLF. */
+export function signinMessage(m: { from: string; to: string; kind: SigninKind; link: string; code: string; now: number; id: string }): string {
+  const subject = m.kind === "welcome" ? "Welcome to LeanMail" : "Sign in to LeanMail";
+  const date = new Date(m.now).toUTCString().replace(/GMT$/, "+0000");
+  const intro = m.kind === "welcome" ? ["Welcome to LeanMail: your account is ready.", "", "Open this link to sign in:"] : ["Open this link to sign in to LeanMail:"];
+  const outro = m.kind === "welcome" ? [] : ["", "If you did not ask to sign in, ignore this message."];
+  const head = [
+    `From: LeanMail <${m.from}>`,
+    `To: ${m.to}`,
+    `Subject: ${subject}`,
+    `Date: ${date}`,
+    `Message-ID: <${m.id}@${domainOf(m.from) || "localhost"}>`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: 7bit",
+    "Auto-Submitted: auto-generated",
+  ];
+  const text = [...intro, m.link, "", `Or enter this code: ${m.code}`, "", "The link and the code work once, and expire soon.", ...outro];
+  return `${head.join("\r\n")}\r\n\r\n${text.join("\r\n")}\r\n`;
+}
+
+/** `<PUBLIC_ORIGIN>/auth/magic?t=<token>` with a token the caller's own key MACs (as GET /auth/magic checks). */
+async function validSigninLink(env: Env, link: unknown, caller: string): Promise<boolean> {
+  if (typeof link !== "string" || link.length > LINK_MAX) return false;
+  const prefix = `${env.PUBLIC_ORIGIN.replace(/\/+$/, "")}/auth/magic?t=`;
+  if (!link.startsWith(prefix)) return false;
+  const rest = link.slice(prefix.length);
+  if (!LINK_TOKEN_RE.test(rest)) return false;
+  const token = safeDecode(rest);
+  if (token === null) return false;
+  const v = await verifyMac(token, env.SESSION_SECRET, ["v1"]);
+  return v !== null && v.acct === caller;
+}
+
+/**
+ * `{to, kind, link, code}` from any container: the Worker writes the sign-in or welcome mail
+ * (From MAIL_FROM) and sends it, but only to the caller's own account email, with a link to this
+ * install's /auth/magic for the caller's account, 20 an hour per account.
+ */
+async function emailSignin(request: Request, env: Env, caller: string, now: number): Promise<Response> {
+  const body = await readJson(request, 16 * 1024);
+  const { to, kind, link, code } = body;
+  if (kind !== "signin" && kind !== "welcome") throw new HttpError(400, "bad_kind");
+  if (!isAddress(to)) throw new HttpError(400, "bad_to");
+  if (typeof code !== "string" || !CODE_RE.test(code)) throw new HttpError(400, "bad_code");
+  if (!(await validSigninLink(env, link, caller))) throw new HttpError(400, "bad_link");
+  const row = await env.DB.prepare("SELECT email FROM accounts WHERE id = ?1").bind(caller).first<{ email: string }>();
+  if (!row || normAddress(row.email) !== normAddress(to)) throw new HttpError(403, "not_your_email");
+  const from = mailFrom(env);
+  if (!isAddress(from)) {
+    log("internal.email_signin_unconfigured", { acct: caller });
+    return json(503, { error: "mail_from_invalid" });
+  }
+  if (await overLimit(env.DB, [`signin_mail:${caller}`], SIGNIN_MAIL_PER_HOUR, now)) {
+    log("internal.email_signin_limited", { acct: caller });
+    return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers: { "content-type": "application/json", "retry-after": "3600" } });
+  }
+  const rcpt = normAddress(to);
+  const raw = signinMessage({ from, to: rcpt, kind, link: link as string, code, now, id: mintUlid(now) });
+  try {
+    await env.EMAIL.send(new EmailMessage(from, rcpt, raw));
+  } catch (e) {
+    log("internal.email_signin_failed", { acct: caller, kind, error: errText(e) });
+    return json(502, { ok: false });
+  }
+  log("internal.email_signin", { acct: caller, kind });
+  return json(200, { ok: true });
+}
+
+// ---- GET /internal/grants, POST /internal/routing/{plan,apply} ----
+
+/**
+ * The operator's /internal/routing/<op>, with the caller's JSON body and `x-routing-account:
+ * <caller>`: the operator holds the Cloudflare token and checks the caller's grants.
+ */
+async function routingForward(request: Request, env: Env, caller: string, op: string, call: typeof callContainer): Promise<Response> {
+  const body = await readJson(request, 1024 * 1024);
+  const res = await call(env, OPERATOR, `/internal/routing/${op}`, body, { routingAccount: caller });
+  log("internal.routing", { acct: caller, op, status: res.status });
+  return new Response(res.body, { status: res.status, headers: { "content-type": res.headers.get("content-type") ?? "application/json" } });
 }
 
 // ---- POST /internal/push ----
@@ -251,6 +372,7 @@ async function putAccounts(request: Request, env: Env): Promise<Response> {
 export async function handleInternal(request: Request, env: Env, deps: Partial<InternalDeps> = {}): Promise<Response> {
   const wake = deps.wake ?? defaultWake;
   const call = deps.call ?? callContainer;
+  const now = (deps.now ?? Date.now)();
   const url = new URL(request.url);
   const { pathname } = url;
   const m = request.method;
@@ -263,8 +385,12 @@ export async function handleInternal(request: Request, env: Env, deps: Partial<I
   const caller = await authenticatedCaller(request, env, claimed);
   if (!caller) return json(401, { error: "unauthorized" });
   try {
-    if (healthCheck) return await containerFor(env, caller).proxy(new Request("http://container/internal/health"), caller);
+    if (healthCheck) return await containerFor(env, caller).proxy(new Request("http://container/internal/health"), caller, { internal: true });
     if (m === "POST" && pathname === "/internal/email/send") return await emailSend(request, env, caller);
+    if (m === "POST" && pathname === "/internal/email/signin") return await emailSignin(request, env, caller, now);
+    if (m === "GET" && pathname === "/internal/grants") return json(200, { domains: await domainsOf(env.DB, caller) });
+    const rt = /^\/internal\/routing\/(plan|apply)$/.exec(pathname);
+    if (m === "POST" && rt) return await routingForward(request, env, caller, rt[1]!, call);
     if (m === "PUT" && pathname === "/internal/routes") return await putRoutes(request, env, caller);
     if (m === "PUT" && pathname === "/internal/accounts") {
       requireOperator(caller);
@@ -273,8 +399,8 @@ export async function handleInternal(request: Request, env: Env, deps: Partial<I
     const w = /^\/internal\/wake\/([^/]+)$/.exec(pathname);
     if (m === "POST" && w) {
       requireOperator(caller);
-      const acct = decodeURIComponent(w[1]!);
-      if (!ACCOUNT_RE.test(acct)) throw new HttpError(400, "bad_account_id");
+      const acct = safeDecode(w[1]!);
+      if (acct === null || !ACCOUNT_RE.test(acct)) throw new HttpError(400, "bad_account_id");
       // `{provision:{email, is_admin, display_name?}}` (the operator's approve) becomes the new
       // account's POST /internal/provision, and its reply is the answer; no body is a plain wake.
       const text = await request.text();

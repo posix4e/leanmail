@@ -191,3 +191,9 @@ export async function domainsNotOwnedBy(db: D1Database, accountId: string, names
   const owned = new Set(results.map((r) => r.name));
   return uniq.filter((n) => !owned.has(n));
 }
+
+/** The domains granted to `accountId`, in name order. */
+export async function domainsOf(db: D1Database, accountId: string): Promise<string[]> {
+  const { results } = await db.prepare("SELECT name FROM domains WHERE account_id = ?1 ORDER BY name").bind(accountId).all<{ name: string }>();
+  return results.map((r) => r.name);
+}

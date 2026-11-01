@@ -89,6 +89,7 @@ def message (p : Page) : IO Resp := do
   let invite ← inviteBlock st id rowKeys
   let junkRow ← junkPanel st id r unsub
   let view := if hasHtml && p.req.param? "view" != some "text" then "html" else "text"
+  let images := p.req.param? "images" == some "1"
   let thread ← match r.text? "thread_id" with
     | some t => st.db.query "SELECT * FROM messages WHERE thread_id = ? AND deleted = 0 ORDER BY received_at ASC, id ASC" #[t]
     | none => pure #[]
@@ -114,10 +115,14 @@ def message (p : Page) : IO Resp := do
   let toggle : Node := if !hasHtml then empty else
     el "nav" [("class", "viewtoggle"), ("aria-label", "Body view")] [
       if view == "html" then elt "span" [("class", "on")] "HTML" else elt "a" [("href", s!"/m/{id}")] "HTML",
-      if view == "text" then elt "span" [("class", "on")] "Text" else elt "a" [("href", s!"/m/{id}?view=text")] "Text"]
+      if view == "text" then elt "span" [("class", "on")] "Text" else elt "a" [("href", s!"/m/{id}?view=text")] "Text",
+      -- remote images stay off (they tell the sender you read it) until asked for
+      if view != "html" then empty
+      else if images then elt "span" [("class", "on")] "Images shown"
+      else elt "a" [("href", s!"/m/{id}?images=1")] "Show images"]
   let body : Node :=
     if view == "html" then
-      el "iframe" [("sandbox", ""), ("src", s!"/api/msg/{id}/html"), ("class", "body-html"), ("title", "Message body"),
+      el "iframe" [("sandbox", ""), ("src", s!"/api/msg/{id}/html{if images then "?images=1" else ""}"), ("class", "body-html"), ("title", "Message body"),
                    ("referrerpolicy", "no-referrer"), ("loading", "lazy")] []
     else if text.isEmpty then emptyNote "This message has no text."
     else elt "pre" [("class", "body-text")] text

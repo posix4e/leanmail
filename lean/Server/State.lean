@@ -11,6 +11,11 @@ HTTP. `call method path body` is the reply as JSON (`Json.null` for an empty 2xx
 on any failure. The real one is `Server.Worker.http`. -/
 structure WorkerClient where
   call : String → String → Lean.Json → IO (Option Lean.Json)
+  /-- The same call with the reply's HTTP status: `(status, body)` for any answer (the body
+  `Json.null` when it is not JSON), `none` when there was none. A fake that gives only `call`
+  answers 200 with what `call` said. -/
+  callStatus : String → String → Lean.Json → IO (Option (Nat × Lean.Json)) := fun m p j => do
+    return (← call m p j).map ((200, ·))
 
 /-- Google's HTTPS endpoints (OAuth token, Gmail API) as one function, so tests answer with a
 fake Google. The real one is libcurl (`Server.Http.request`). -/

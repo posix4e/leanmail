@@ -61,10 +61,14 @@ def route (st : State) (r : Router.Req) : IO Router.Resp := do
   | "GET", ["internal", "health"] =>
     if Router.internalOk st r then return Router.Resp.ok (← Health.internalJson st)
     else return Router.Resp.error 401 "unauthorized"
-  | _, _ => Router.dispatch st (Routes.all st.config) r
+  | _, _ => Routes.dispatch st r
 
 /-- Every response carries `X-Next-Wake` when there is a next wake to schedule (`Jobs.nextWake`). -/
 def handle (st : State) (req : Request Body.Stream) : ContextAsync (Response Body.Any) := do
+  -- route on the raw path only when it is plain (`Router.rawPathOk`): no `//`, dot segments or
+  -- encoded letters in the first segment
+  if !Router.rawPathOk (toString req.line.uri.pathOrRoot) then
+    return ← ofResp Router.Resp.notFound
   let r ← toReq req
   let resp ← route st r
   ofResp (← Jobs.withNextWake st resp)
@@ -75,6 +79,11 @@ def onFailure (e : IO.Error) : Async Unit :=
 def boot : IO State := do
   let config ← Config.fromEnv
   Log.setLevel config.logLevel
+  if let some why := config.refusal? then
+    Log.error "boot.refused" [("reason", Json.str why)]
+    IO.Process.exit 1
+  -- libcurl's global state, once, before any thread makes a request
+  Http.init
   IO.FS.createDirAll config.dataDir
   let db ← Db.openFile config.dbPath
   let schemaVersion ← Schema.migrate db

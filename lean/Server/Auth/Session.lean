@@ -56,6 +56,7 @@ def csrfOk (c : Config) (req : Req) : Bool :=
   if req.method == "GET" || req.method == "HEAD" then true else
   let originOk := match req.header? "origin" with
     | none => true
+    | some "null" => req.header? "sec-fetch-site" == some "same-origin"
     | some o => trimSlash o == c.origin
   originOk && req.header? "x-requested-with" == some "LeanMail"
 

@@ -34,6 +34,13 @@ account database and are simply empty in an account container.
   `POST /internal/provision {email, is_admin}` on the new account's container.
 - Bootstrap: a sign-up from an `ADMIN_EMAILS` address is approved at once, as an admin, whatever
   `SIGNUP_MODE` says (closed excepted), so a fresh install's operator can approve the rest.
+- Only a NEW account is auto-approved by a sign-up. A sign-up never changes an existing account's
+  status: a `pending` one waits for an admin, a `disabled` one stays disabled (the sign-up is
+  dropped, logged in `audit`).
+- Delivery is recorded: `accounts.projected_at` when the Worker took the account's row,
+  `provisioned_at` when the wake that provisions its container went through. Either still NULL
+  is retried by a repeat sign-up and by the `pending_projection` lane on every `/internal/tick`
+  (`syncPending`), so a Worker that was down for a moment cannot strand an approved account.
 
 Every admin action writes `audit(at, actor, action, target)`. -/
 
@@ -63,28 +70,65 @@ def selfIsAdmin (st : State) : IO Bool := do
   let some r ← st.db.queryOne "SELECT email, is_admin FROM account WHERE id = 1" | return false
   return r.bool "is_admin" || st.config.isAdminEmail (r.text "email")
 
-/-- Push one account and all its domain grants to the Worker's D1 projection. -/
+/-- Push one account and all its domain grants to the Worker's D1 projection; records
+`projected_at` (NULL again when the Worker did not take it, so it is retried). -/
 def project (st : State) (acct : String) : IO Bool := do
-  let some a ← st.db.queryOne "SELECT id, email, status FROM accounts WHERE id = ?" #[acct] | return false
-  let doms ← st.db.query "SELECT domain FROM domain_grants WHERE account_id = ? ORDER BY domain" #[acct]
-  let body := Json.mkObj [
-    ("accounts", Json.arr #[Json.mkObj [("id", Json.str (a.text "id")), ("email", Json.str (a.text "email")),
-                                        ("status", Json.str (a.text "status"))]]),
-    ("domains", Json.arr (doms.map fun d => Json.mkObj [("name", Json.str (d.text "domain")), ("account_id", Json.str acct)])),
-    ("replace_domains_for", Json.arr #[Json.str acct])]
-  return (← Worker.internal st "/internal/accounts" body (method := "PUT")).isSome
+  let ok ← projectRaw st acct
+  let now ← Clock.nowMs
+  st.db.exec "UPDATE accounts SET projected_at = ? WHERE id = ?" #[(if ok then some now else none : Option Nat), acct]
+  return ok
+where
+  projectRaw (st : State) (acct : String) : IO Bool := do
+    let some a ← st.db.queryOne "SELECT id, email, status FROM accounts WHERE id = ?" #[acct] | return false
+    let doms ← st.db.query "SELECT domain FROM domain_grants WHERE account_id = ? ORDER BY domain" #[acct]
+    let body := Json.mkObj [
+      ("accounts", Json.arr #[Json.mkObj [("id", Json.str (a.text "id")), ("email", Json.str (a.text "email")),
+                                          ("status", Json.str (a.text "status"))]]),
+      ("domains", Json.arr (doms.map fun d => Json.mkObj [("name", Json.str (d.text "domain")), ("account_id", Json.str acct)])),
+      ("replace_domains_for", Json.arr #[Json.str acct])]
+    return (← Worker.internal st "/internal/accounts" body (method := "PUT")).isSome
+
+/-- The wake that provisions an active account's container; records `provisioned_at`. -/
+def provision (st : State) (acct : String) : IO Bool := do
+  let some a ← st.db.queryOne "SELECT email, is_admin FROM accounts WHERE id = ? AND status = 'active'" #[acct] | return false
+  let isAdmin := a.bool "is_admin" || st.config.isAdminEmail (a.text "email")
+  let woken ← Worker.internal st s!"/internal/wake/{acct}" (Json.mkObj [("provision", Json.mkObj [
+    ("email", Json.str (a.text "email")), ("is_admin", Json.bool isAdmin)])])
+  let now ← Clock.nowMs
+  st.db.exec "UPDATE accounts SET provisioned_at = ? WHERE id = ?" #[(if woken.isSome then some now else none : Option Nat), acct]
+  return woken.isSome
+
+/-- Retry what has not reached the Worker for one account: its projection (any account past
+`pending`) and, for an active one, its provisioning. `(projected, provisioned)` as they now stand. -/
+def syncAccount (st : State) (acct : String) : IO (Bool × Bool) := do
+  let some r ← st.db.queryOne "SELECT status, projected_at, provisioned_at FROM accounts WHERE id = ?" #[acct] | return (false, false)
+  let status := r.text "status"
+  let projected ← if status == "pending" then pure false
+    else if (r.nat? "projected_at").isSome then pure true else project st acct
+  let provisioned ← if status != "active" then pure false
+    else if (r.nat? "provisioned_at").isSome then pure true else provision st acct
+  return (projected, provisioned)
+
+/-- The `pending_projection` lane: retry up to 20 accounts whose projection or provisioning has
+not gone through. How many were tried. -/
+def syncPending (st : State) : IO Nat := do
+  if !st.config.isOperator then return 0
+  let rows ← st.db.query "SELECT id FROM accounts WHERE (status != 'pending' AND projected_at IS NULL)
+    OR (status = 'active' AND provisioned_at IS NULL) ORDER BY updated_at LIMIT 20"
+  for r in rows do discard <| syncAccount st (r.text "id")
+  if !rows.isEmpty then Log.info "operator.sync_pending" [("accounts", Json.num rows.size)]
+  return rows.size
 
 /-- Mark an account active and tell the Worker: projection, then a wake carrying the provision. -/
 def activate (st : State) (acct actor : String) : IO (Bool × Bool) := do
   let now ← Clock.nowMs
-  st.db.exec "UPDATE accounts SET status = 'active', approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?"
+  st.db.exec "UPDATE accounts SET status = 'active', approved_by = ?, approved_at = ?, updated_at = ?,
+      projected_at = NULL, provisioned_at = NULL WHERE id = ?"
     #[actor, now, now, acct]
-  let some a ← st.db.queryOne "SELECT email, is_admin FROM accounts WHERE id = ?" #[acct] | return (false, false)
+  let some _ ← st.db.queryOne "SELECT id FROM accounts WHERE id = ?" #[acct] | return (false, false)
   let projected ← project st acct
-  let isAdmin := a.bool "is_admin" || st.config.isAdminEmail (a.text "email")
-  let woken ← Worker.internal st s!"/internal/wake/{acct}" (Json.mkObj [("provision", Json.mkObj [
-    ("email", Json.str (a.text "email")), ("is_admin", Json.bool isAdmin)])])
-  return (projected, woken.isSome)
+  let woken ← provision st acct
+  return (projected, woken)
 
 /-! ## Sign-up (public) -/
 
@@ -102,10 +146,21 @@ def signup (c : Ctx) (req : Req) : IO Resp := do
   if (recent.map (·.nat "n")).getD 0 ≥ rateLimit then return Resp.error 429 "too many sign-ups"
   let accepted := Resp.okStatus 202
   let existing ← st.db.queryOne "SELECT id, status FROM accounts WHERE email = ?" #[email]
-  if (existing.map (·.text "status")) == some "active" then return accepted
+  match existing with
+  | some r =>
+    -- an existing account's status is never changed by a sign-up
+    if r.text "status" == "active" then
+      -- …but what did not reach the Worker the first time is tried again
+      discard <| syncAccount st (r.text "id")
+      return accepted
+    if r.text "status" == "disabled" then
+      audit st "signup" "ignored_disabled" (r.text "id")
+      return accepted
+  | none => pure ()
   let sid := Core.Ulid.encode now (← Crypto.randomBytes 10)
   let boss := st.config.isAdminEmail email
-  let auto := mode == "open" || boss
+  -- only a new account is approved at once
+  let auto := existing.isNone && (mode == "open" || boss)
   let acct ← match existing with
     | some r => pure (r.text "id")
     | none => do pure (Core.Ulid.encode now (← Crypto.randomBytes 10))

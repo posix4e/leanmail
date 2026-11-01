@@ -9,16 +9,17 @@ import Server.Clock
 /-! # Pages: the shared frame
 
 Every page is built with `Core.Html` (all user data escaped) and answered by `htmlResp`, which
-sets the page CSP, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff` and
+sets the page CSP, `Referrer-Policy: same-origin` (no referrer to third parties; `no-referrer`
+would make browsers send `Origin: null` on our own form posts), `X-Content-Type-Options: nosniff` and
 `Cache-Control: no-store`.
 
 Page routes are registered `.public` and checked here (`guarded`), because the router's own
 refusal is a JSON 401 and a browser should land on `/signin` instead. `guarded` asks
 `Router.authorize` for a `.session` as if the request were a GET, so the router's
 `X-Requested-With` rule (which a plain HTML form cannot meet) does not apply, and then applies the
-form rule (`formCsrfOk`) itself to mutations: `Origin` equal to `PUBLIC_ORIGIN`, or with no
-`Origin` either `Sec-Fetch-Site: same-origin` or `X-Requested-With: LeanMail`. The dev bypass
-skips it, as it does for the API. -/
+form rule (`formCsrfOk`) itself to mutations: `Origin` equal to `PUBLIC_ORIGIN`; `Origin: null`
+only with `Sec-Fetch-Site: same-origin`; with no `Origin` either `Sec-Fetch-Site: same-origin` or
+`X-Requested-With: LeanMail`. The dev bypass skips it, as it does for the API. -/
 
 namespace Server.Pages
 
@@ -28,7 +29,7 @@ def csp : String :=
   "default-src 'self'; img-src 'self' data:; frame-src 'self'; style-src 'self'; script-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
 
 def secHeaders : List (String × String) := [
-  ("Content-Security-Policy", csp), ("Referrer-Policy", "no-referrer"),
+  ("Content-Security-Policy", csp), ("Referrer-Policy", "same-origin"),
   ("X-Content-Type-Options", "nosniff"), ("Cache-Control", "no-store")]
 
 def htmlResp (status : Nat) (doc : Node) : Resp :=
@@ -51,6 +52,8 @@ private def trimSlash (s : String) : String := if s.endsWith "/" then String.ofL
 /-- The CSRF rule for a cookie-authenticated form POST (see the module doc). -/
 def formCsrfOk (c : Config) (req : Req) : Bool :=
   match req.header? "origin" with
+  -- a privacy-preserving browser may say `null` for its own origin; only Fetch Metadata vouches then
+  | some "null" => req.header? "sec-fetch-site" == some "same-origin"
   | some o => trimSlash o == c.origin
   | none => req.header? "sec-fetch-site" == some "same-origin" || req.header? "x-requested-with" == some "LeanMail"
 
@@ -163,7 +166,7 @@ def head (title : String) : Node :=
   el "head" [] [
     el "meta" [("charset", "utf-8")],
     el "meta" [("name", "viewport"), ("content", "width=device-width, initial-scale=1")],
-    el "meta" [("name", "referrer"), ("content", "no-referrer")],
+    el "meta" [("name", "referrer"), ("content", "same-origin")],
     el "meta" [("name", "color-scheme"), ("content", "light dark")],
     elt "title" [] s!"LeanMail · {title}",
     el "link" [("rel", "stylesheet"), ("href", "/static/app.css")],
@@ -221,6 +224,14 @@ def errorDoc (status : Nat) (me : Option Me) : Node :=
 def errorPage (status : Nat) (me : Option Me := none) : Resp := htmlResp status (errorDoc status me)
 
 def notFoundPage (p : Page) : Resp := errorPage 404 (some p.me)
+
+/-- A path no route has: for a browser (`Accept: text/html`, not our script's JSON) the HTML 404
+page, framed for the signed-in user when there is a session; the JSON 404 otherwise. -/
+def notFoundFor (st : State) (req : Req) : IO Resp := do
+  if !wantsHtml req || wantsJson req then return Resp.notFound
+  match ← Router.authorize st .session { req with method := "GET" } with
+  | .ok (p, _) => return errorPage 404 (some (← loadMe st p))
+  | .error _ => return errorPage 404
 
 /-- A page route: the session (or the dev bypass) checked here; `mutating` routes also need
 `formCsrfOk`. On no session an HTML request is sent to `/signin`; anything else gets the router's

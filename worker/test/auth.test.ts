@@ -67,7 +67,7 @@ describe("stampHeaders (MailContainer.proxy)", () => {
       "a1",
       "derived",
     );
-    expect(Object.fromEntries(h)).toEqual({ "x-account-id": "a1", "x-internal-secret": "derived", "cf-connecting-ip": "1.2.3.4", cookie: "c=1" });
+    expect(Object.fromEntries(h)).toEqual({ "x-account-id": "a1", "x-internal-secret": "derived", "x-lm-public": "1", "cf-connecting-ip": "1.2.3.4", cookie: "c=1" });
     // the passkey login's voucher (set by src/auth.ts) passes through to the container
     expect(stampHeaders(new Headers({ "x-passkey-challenge-ok": "v" }), "a1", "d").get("x-passkey-challenge-ok")).toBe("v");
     const admin = stampHeaders(new Headers({ "x-admin-account": "evil" }), "_operator", "op", { adminAccount: "a1" });
@@ -75,19 +75,22 @@ describe("stampHeaders (MailContainer.proxy)", () => {
   });
 });
 
-describe("item 1: /internal/email/send from MAIL_FROM", () => {
+describe("/internal/email/send and MAIL_FROM", () => {
   it("defaults MAIL_FROM to no-reply@<host of PUBLIC_ORIGIN>, as the container does", () => {
     expect(mailFrom({ ...env, MAIL_FROM: undefined, PUBLIC_ORIGIN: "http://127.0.0.1:8787" } as Env)).toBe("no-reply@127.0.0.1");
     expect(mailFrom({ ...env, MAIL_FROM: undefined, PUBLIC_ORIGIN: "https://leanmail.io/x" } as Env)).toBe("no-reply@leanmail.io");
     expect(mailFrom({ ...env, MAIL_FROM: "Hello@Leanmail.io" } as Env)).toBe("hello@leanmail.io");
   });
 
-  it("lets any authenticated container send as MAIL_FROM with no route; other From still need one", async () => {
+  it("an account may no longer send as MAIL_FROM through /internal/email/send; the operator still may", async () => {
     const sent: string[] = [];
     const e = { ...env, MAIL_FROM: "no-reply@leanmail.io", EMAIL: { send: async (m: EmailMessage) => void sent.push(`${m.from}>${m.to}`) } } as unknown as Env;
-    const body = (from: string) => ({ from, to: ["u@x.example"], raw_b64: btoa("x") });
-    expect((await handleInternal(await internalReq("POST", "/internal/email/send", body("No-Reply@leanmail.io"), "a1"), e)).status).toBe(200);
+    const body = (from: string) => ({ from, to: ["u@x.example"], raw_b64: btoa(`From: ${from}\r\nSubject: x\r\n\r\nx`) });
+    const r = await handleInternal(await internalReq("POST", "/internal/email/send", body("No-Reply@leanmail.io"), "a1"), e);
+    expect(r.status).toBe(403);
+    expect(await r.json()).toEqual({ error: "from_not_allowed" });
     expect((await handleInternal(await internalReq("POST", "/internal/email/send", body("other@leanmail.io"), "a1"), e)).status).toBe(403);
+    expect((await handleInternal(await internalReq("POST", "/internal/email/send", body("no-reply@leanmail.io"), "_operator"), e)).status).toBe(200);
     expect(sent).toEqual(["no-reply@leanmail.io>u@x.example"]);
   });
 });
@@ -236,10 +239,11 @@ describe("item 5: public auth routes", () => {
 
 describe("item 6: /admin/*", () => {
   it("a JSON or script request goes to the operator with the cookie's account; a navigation to the account's shell", async () => {
-    const { e, calls } = stubbed();
+    const { e: e0, calls } = stubbed();
+    const e = { ...e0, PUBLIC_ORIGIN: ORIGIN } as Env;
     const cookie = `lm_session=${await signMac("v1", "a1", "sid.9999999999999.0", S)}`;
     await fetchVia(e, "/admin/signups", { headers: { cookie, accept: "application/json", "x-admin-account": "evil" } });
-    await fetchVia(e, "/admin/signups/01J/approve", { method: "POST", headers: { cookie, accept: "text/html", "x-requested-with": "LeanMail" } });
+    await fetchVia(e, "/admin/signups/01J/approve", { method: "POST", headers: { cookie, origin: ORIGIN, accept: "text/html", "x-requested-with": "LeanMail" } });
     await fetchVia(e, "/admin/signups", { headers: { cookie, accept: "text/html,application/xhtml+xml" } });
     expect(calls.map((c) => `${c.name} ${c.acct} ${c.method} ${c.path} ${c.adminAccount ?? "-"}`)).toEqual([
       "_operator _operator GET /admin/signups a1",

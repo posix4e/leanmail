@@ -249,6 +249,7 @@ def put (c : Ctx) (req : Req) : IO Resp := do
   match fieldsOf j with
   | .error f => return f.resp
   | .ok f =>
+    if let .error e ← Send.refuseWithheldRefs c.st c.principal f.replyOf f.forwardOf then return e.resp
     match ← save c.st (c.param "id") expected mid f with
     | .error e => return e.resp
     | .ok (status, r) => return Resp.json status (rowJson r false)

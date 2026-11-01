@@ -247,14 +247,22 @@ def domainOf (addr : String) : String := ((addr.splitOn "@").getLast?).getD ""
 
 def accountRow (st : State) : IO (Option Row) := st.db.queryOne "SELECT * FROM account WHERE id = 1"
 
-/-- The port of MailVault's `canSendAs`, with the account's `default_from` always allowed and
-the dev bypass allowing anything: an address row decides for itself (`can_send = 1` and mail
-kept in the vault); otherwise the domain must be listed in some `domains.sending` and its default
-must keep mail in the vault. -/
-def sendable (st : State) (principal : Principal) (addr : String) : IO Bool := do
+/-- The operator's sign-in address (`MAIL_FROM`): never a From for anyone, whatever the routing
+or `default_from` says (the Worker sends sign-in mail from it itself, `/internal/email/signin`). -/
+def isMailFrom (st : State) (addr : String) : Bool :=
+  let m := (Str.trim st.config.mailFrom).toLower
+  !m.isEmpty && (Str.trim addr).toLower == m
+
+/-- The port of MailVault's `canSendAs`, with the account's `default_from` allowed (unless
+`withDefault` is false) and the dev bypass allowing anything except `MAIL_FROM`: an address row
+decides for itself (`can_send = 1` and mail kept in the vault); otherwise the domain must be listed
+in some `domains.sending` and its default must keep mail in the vault. `MAIL_FROM` is refused for
+everyone. -/
+def sendable (st : State) (principal : Principal) (addr : String) (withDefault : Bool := true) : IO Bool := do
+  if isMailFrom st addr then return false
   if principal == .dev then return true
   let some a := normEmail? addr | return false
-  if (((← accountRow st).map (·.text "default_from")).getD "").toLower == a then return true
+  if withDefault && (((← accountRow st).map (·.text "default_from")).getD "").toLower == a then return true
   if a.startsWith "*@" then return false
   -- the connected Gmail address and its verified aliases, sent through Gmail
   if ← Gmail.SendAs.isIdentity st a then return true
@@ -274,7 +282,7 @@ def fromChoices (st : State) : IO (List String) := do
   let df := (((← accountRow st).map (·.text "default_from")).getD "").toLower
   let rows ← st.db.query "SELECT address FROM addresses WHERE can_send = 1 AND mail IN ('vault','vault+forward') AND address NOT LIKE '*@%' ORDER BY address"
   let gmail ← Gmail.SendAs.identities st
-  return ((if df.isEmpty then [] else [df]) ++ rows.toList.map (·.text "address") ++ gmail).eraseDups
+  return ((if df.isEmpty then [] else [df]) ++ rows.toList.map (·.text "address") ++ gmail).eraseDups.filter (!isMailFrom st ·)
 
 /-- Every address that is the account's own (for reply-all). -/
 def ownAddresses (st : State) : IO (List String) := do
@@ -344,6 +352,15 @@ def replyHeaders (parent : Row) (irtGiven : Option String) (refs : List String) 
   let all := (base ++ irt.toList).eraseDups
   (irt, trimReferences all)
 
+/-- For an API token, 403 `privileged` when `reply_of` or `forward_of` names withheld mail
+(`AI.withheldSql`); a session may. Shared by sends and draft saves (`Drafts.put`). -/
+def refuseWithheldRefs (st : State) (principal : Principal) (replyOf forwardOf : Option String) : IO (Except Fail Unit) := do
+  let isTok := match principal with | .token _ _ => true | _ => false
+  if !isTok then return .ok ()
+  for id in replyOf.toList ++ forwardOf.toList do
+    if ← AI.isWithheld st id then return fail 403 "privileged" [("id", Json.str id)]
+  return .ok ()
+
 private def sendCore (st : State) (principal : Principal) (r0 : Request) : IO (Except Fail Outcome) := do
   let now ← Clock.nowMs
   let acct ← accountRow st
@@ -357,6 +374,8 @@ private def sendCore (st : State) (principal : Principal) (r0 : Request) : IO (E
   if !(← sendable st principal fromAddr) then return fail 403 "from_not_allowed" [("from", Json.str fromAddr)]
   -- references and forwarded attachments
   let mut r := { r0 with from_ := fromAddr, references := r0.references.filterMap messageId? }
+  -- a token never builds on privileged mail (`Api` withholds it from tokens too)
+  if let .error f ← refuseWithheldRefs st principal r.replyOf r.forwardOf then return .error f
   if let some pid := r.replyOf then
     let some parent ← Api.messageRow st pid | return fail 400 "reply_of_not_found"
     let (irt, refs) := replyHeaders parent r.inReplyTo r.references

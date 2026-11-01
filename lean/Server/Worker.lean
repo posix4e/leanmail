@@ -15,26 +15,44 @@ together (`worker/src/internal.ts`, `authenticatedCaller`). -/
 
 open Lean Server.Db
 
+/-- One request to `{WORKER_ORIGIN}{path}`: the status and the body as JSON (`Json.null` when it
+is not), or `none` when there was no answer. -/
+def httpCall (c : Config) (method path : String) (json : Json) : IO (Option (Nat × Json)) := do
+  try
+    -- a GET or HEAD carries no body (libcurl would otherwise upload one)
+    let bodyless := method == "GET" || method == "HEAD"
+    let r ← Server.Http.request {
+      -- a routing plan or apply is many Cloudflare calls at the operator
+      method, url := c.workerOrigin ++ path, timeoutMs := if path.startsWith "/internal/routing/" then 120000 else 10000
+      headers := (if bodyless then [] else [("Content-Type", "application/json")]) ++
+                 [("X-Internal-Secret", c.internalSecret), ("x-account-id", c.accountId)]
+      body := if bodyless then .empty else json.compress.toUTF8 }
+    if !r.isOk then
+      Log.warn "worker.internal_status" [("path", Json.str path), ("status", Json.num r.status.toNat)]
+    return some (r.status.toNat, (Json.parse (String.fromUTF8? r.body |>.getD "")).toOption.getD Json.null)
+  catch e =>
+    Log.warn "worker.internal_failed" [("path", Json.str path), ("error", Json.str (toString e))]
+    return none
+
 /-- The real client: HTTPS over libcurl to `{WORKER_ORIGIN}{path}`. -/
 def http (c : Config) : WorkerClient where
   call method path json := do
-    try
-      let r ← Server.Http.request {
-        method, url := c.workerOrigin ++ path, timeoutMs := 10000
-        headers := [("Content-Type", "application/json"), ("X-Internal-Secret", c.internalSecret),
-                    ("x-account-id", c.accountId)]
-        body := json.compress.toUTF8 }
-      if !r.isOk then
-        Log.warn "worker.internal_status" [("path", Json.str path), ("status", Json.num r.status.toNat)]
-        return none
-      return some ((Json.parse (String.fromUTF8? r.body |>.getD "")).toOption.getD Json.null)
-    catch e =>
-      Log.warn "worker.internal_failed" [("path", Json.str path), ("error", Json.str (toString e))]
-      return none
+    match ← httpCall c method path json with
+    | some (s, j) => return if 200 ≤ s && s < 300 then some j else none
+    | none => return none
+  callStatus method path json := httpCall c method path json
 
 /-- `method` (POST unless told) `json` to the Worker's `path`; the reply, or `none` on failure. -/
 def internal (st : State) (path : String) (json : Json) (method : String := "POST") : IO (Option Json) :=
   st.worker.call method path json
+
+/-- The domains the operator granted this account: `GET /internal/grants` → `{domains: [...]}`
+(the Worker reads them from D1 for the calling account). `none` when the Worker did not answer
+or answered something else, which callers treat as no grants (fail closed). -/
+def grants (st : State) : IO (Option (List String)) := do
+  let some j ← internal st "/internal/grants" Json.null (method := "GET") | return none
+  let some ds := (j.getObjValAs? (Array Json) "domains").toOption | return none
+  return some (ds.toList.filterMap fun | .str s => some (s.trimAscii.toString.toLower) | _ => none)
 
 /-- What the phone shows: the sender's name (else address) and the subject, each cut short so
 the APNs payload stays well under its 4 KiB. -/

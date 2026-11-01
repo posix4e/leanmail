@@ -92,6 +92,9 @@ def chat (st : State) (system user : String) (maxTokens : Nat := 400) : IO (Exce
     ("temperature", Json.num 0), ("max_tokens", Json.num maxTokens)]
   let req : Core.Http.Request := {
     method := "POST", url := c.aiUrl, timeoutMs := 90000, body := body.compress.toUTF8
+    -- a remote model is reached under the safe profile (https, public addresses only); a model
+    -- on this machine (`AI_BASE_URL` on localhost) is trusted
+    safe := !Config.isLocalUrl c.aiBaseUrl
     headers := [("Content-Type", "application/json"), ("Accept", "application/json"),
                 ("Authorization", s!"Bearer {c.aiApiKey}")] }
   let t0 ← IO.monoMsNow

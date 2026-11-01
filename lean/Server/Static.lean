@@ -28,8 +28,13 @@ def serve (c : Ctx) (_ : Req) : IO Resp := do
   return { status := 200, body, headers := [
     ("Content-Type", ctype), ("Cache-Control", "public, max-age=3600"), ("X-Content-Type-Options", "nosniff")] }
 
+/-- `GET /favicon.ico`: nothing to show, said cheaply (a browser asks on every page). -/
+def favicon (_ : Ctx) (_ : Req) : IO Resp :=
+  return { status := 204, headers := [("Cache-Control", "public, max-age=86400")] }
+
 def routes : Array Route := #[
-  route "GET" "/static/:file" .«public» serve
+  route "GET" "/static/:file" .«public» serve,
+  route "GET" "/favicon.ico" .«public» favicon
 ]
 
 end Server.Static

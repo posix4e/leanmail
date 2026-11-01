@@ -35,7 +35,12 @@ namespace Server.Routes
 def all (c : Config) : Array Router.Route :=
   Gmail.routes ++ Api.routes ++ Mcp.routes ++ AI.routes ++ Calendar.routes ++ Junk.routes ++ Routing.routes ++ Push.routes ++ Expiry.routes ++
     Send.routes ++ Drafts.routes ++ Account.routes ++ Auth.Magic.routes ++ Auth.Session.routes ++ Auth.ApiTokens.routes ++
-    Auth.Passkey.routes ++ (if c.isOperator then Operator.routes else #[]) ++ Pages.passkeyPageRoutes ++ Pages.signupRoutes ++
+    Auth.Passkey.routes ++ (if c.isOperator then Operator.routes ++ Routing.operatorRoutes else #[]) ++ Pages.passkeyPageRoutes ++ Pages.signupRoutes ++
     Pages.routes ++ Static.routes
+
+/-- Route a request through the whole table; an unknown path is the HTML 404 page for a
+browser (`Pages.notFoundFor`) and the JSON 404 for everyone else. -/
+def dispatch (st : State) (r : Router.Req) : IO Router.Resp :=
+  Router.dispatch st (all st.config) r (notFound := Pages.notFoundFor st)
 
 end Server.Routes

@@ -11,14 +11,22 @@ export function containerFor(env: Env, acct: string): DurableObjectStub<MailCont
   return env.MAIL.get(env.MAIL.idFromName(acct));
 }
 
-/** POST a path to an account's container through its Durable Object (which stamps the secret). */
-export async function callContainer(env: Env, acct: string, path: string, body?: unknown): Promise<Response> {
+export interface CallOptions {
+  /** To the operator's /internal/routing/*: the account the plan or apply is for. */
+  routingAccount?: string;
+}
+
+/**
+ * POST a path to an account's container through its Durable Object, which stamps the secret.
+ * The Worker's own call: it goes in without `x-lm-public`, so `/internal/*` paths are allowed.
+ */
+export async function callContainer(env: Env, acct: string, path: string, body?: unknown, opts: CallOptions = {}): Promise<Response> {
   const init: RequestInit = { method: "POST" };
   if (body !== undefined) {
     init.body = JSON.stringify(body);
     init.headers = { "content-type": "application/json" };
   }
-  return containerFor(env, acct).proxy(new Request(`http://container${path}`, init), acct);
+  return containerFor(env, acct).proxy(new Request(`http://container${path}`, init), acct, { internal: true, routingAccount: opts.routingAccount });
 }
 
 export type WakeFn = (env: Env, acct: string, ulid?: string) => Promise<void>;

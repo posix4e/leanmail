@@ -1,6 +1,7 @@
 import Lean.Data.Json
 import Server.Router.Types
 import Server.Auth.Magic
+import Server.Send
 import Server.Clock
 
 /-! # The account row
@@ -53,6 +54,10 @@ def patch (c : Ctx) (req : Req) : IO Resp := do
     let f ← if f.isEmpty then pure "" else match normEmail? f with
       | some e => pure e
       | none => return Resp.error 400 "bad default_from"
+    -- the From of every send that names none: only an address this account may send as, and
+    -- never the operator's sign-in address
+    if !f.isEmpty && !(← Send.sendable c.st c.principal f (withDefault := false)) then
+      return Resp.error 400 "default_from not sendable"
     sets := sets.push "default_from = ?"; args := args.push (.text f)
   match j.getObjVal? "retention_days" with
   | .ok .null => sets := sets.push "retention_days = NULL"

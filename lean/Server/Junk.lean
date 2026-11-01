@@ -143,6 +143,35 @@ def parseUnsub (value : String) (post : Option String) : Unsub := Id.run do
     else if lower.startsWith "https://" && u.url.isNone then u := { u with url := some t }
   return u
 
+/-- A DNS name, not an address literal: two or more labels of `[a-z0-9-]` (none starting or
+ending with `-`), a top label that is letters (or an IDNA `xn--` label), and not a local name. -/
+def dnsName (h : String) : Bool :=
+  let labels := h.splitOn "."
+  let top := labels.getLast?.getD ""
+  !h.isEmpty && h.length ≤ 253 && labels.length ≥ 2 &&
+    labels.all (fun l => !l.isEmpty && l.length ≤ 63 && !l.startsWith "-" && !l.endsWith "-" &&
+      l.toList.all fun c => ('a' ≤ c && c ≤ 'z') || ('0' ≤ c && c ≤ '9') || c == '-') &&
+    (top.toList.all (fun c => 'a' ≤ c && c ≤ 'z') || top.startsWith "xn--") && top.length ≥ 2 &&
+    !["localhost", "local", "internal", "home", "lan", "arpa", "test", "invalid"].contains top
+
+/-- The one-click target, parsed strictly: `https://` (any case), no userinfo (`@`), fragment
+(`#`), backslash, space or control character anywhere, an optional numeric port, and a host that
+is a DNS name (`dnsName`). The URL as given, or `none`. Resolution is checked when connecting
+(`Core.Http.Request.safe`). -/
+def safeUnsubUrl? (url : String) : Option String := do
+  guard (url.toLower.startsWith "https://")
+  guard (url.length ≤ 2048)
+  guard (!url.toList.any fun c => c == '@' || c == '#' || c == '\\' || c.toNat ≤ 0x20 || c.toNat == 0x7f)
+  let rest := String.ofList (url.toList.drop 8)
+  let authority := String.ofList (rest.toList.takeWhile fun c => c != '/' && c != '?')
+  let (host, port) := match authority.splitOn ":" with
+    | [h] => (h, "")
+    | [h, p] => (h, p)
+    | _ => ("", "x")
+  guard (port.isEmpty || (port.length ≤ 5 && port.toList.all Char.isDigit))
+  guard (dnsName host.toLower)
+  return url
+
 /-- The host of an `https://` URL. -/
 def urlHost (url : String) : String :=
   let rest := String.ofList (url.toList.drop 8)
@@ -165,9 +194,10 @@ def unsubscribe (st : State) (id : String) : IO Result := do
   match u.url with
   | some url =>
     if !u.oneClick || !publicHost (urlHost url) then return .ok manual
+    let some url := safeUnsubUrl? url | return .ok manual
     let r ← try
         let resp ← st.web.request { method := "POST", url, timeoutMs := 15000, body := "List-Unsubscribe=One-Click".toUTF8
-                                    headers := [("Content-Type", "application/x-www-form-urlencoded")] }
+                                    headers := [("Content-Type", "application/x-www-form-urlencoded")], safe := true }
         pure (some resp.status)
       catch _ => pure none
     Log.info "junk.unsubscribe" [("ok", Json.bool (r.any fun s => 200 ≤ s && s < 300))]

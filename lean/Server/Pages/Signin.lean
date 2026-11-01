@@ -63,7 +63,12 @@ def checkMailDoc (email : String) (notice : Node := empty) : Node :=
       codeForm email,
       el "p" [("class", "hint")] [elt "a" [("href", "/signin")] "Use another address"]]]
 
+/-- `GET /signin`; `?out=1` after signing out; `?sent=1[&email=…]` after the Worker's
+`/auth/login` took the address: the "check your mail" notice and the code form. -/
 def signinGet (c : Ctx) (req : Req) : IO Resp := do
+  if req.param? "sent" == some "1" then
+    let email := ((req.param? "email").bind normEmail?).getD ""
+    return htmlResp 200 (checkMailDoc email)
   let notice := if req.param? "out" == some "1" then flash "ok" "You are signed out." else empty
   return htmlResp 200 (signinDoc c.st.config notice)
 
@@ -72,7 +77,10 @@ def signinPost (c : Ctx) (req : Req) : IO Resp := do
   let email := Core.Text.Str.trim (formField (parseForm req.body) "email")
   let some e := normEmail? email | return htmlResp 400 (signinDoc c.st.config (flash "err" "That does not look like an email address."))
   if let some mine ← Auth.Magic.accountEmail c.st then
-    if mine.toLower == e then discard <| Auth.Magic.sendLink c.st mine "signin"
+    if mine.toLower == e then
+      -- the same cap as `/internal/auth/magic`
+      if (← Auth.Magic.liveLinks c.st (← Clock.nowMs)) < Auth.Magic.maxLiveLinks then
+        discard <| Auth.Magic.sendLink c.st mine "signin"
   return htmlResp 200 (checkMailDoc e)
 
 def codePost (c : Ctx) (req : Req) : IO Resp := do

@@ -176,6 +176,12 @@ table.admin th, table.admin td { text-align: left; padding: 6px 8px; border-bott
 }
 .tabs .tab-aux { margin-left: auto; }
 .tabs .tab-aux + .tab-aux { margin-left: 0; }
+/* a phone: the tabs wrap onto a second row rather than hide Junk, All, Drafts and Compose
+   off-screen behind a scroll with no affordance */
+@media (max-width: 420px) {
+  .tabs { flex-wrap: wrap; overflow-x: visible; row-gap: 4px; }
+  .tabs .tab-aux { margin-left: 0; }
+}
 
 /* M7: calendar, invites, junk, routing, expiring */
 .month-nav { display: flex; gap: 12px; align-items: center; margin: 8px 0 12px; flex-wrap: wrap; }

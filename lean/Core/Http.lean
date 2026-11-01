@@ -11,6 +11,10 @@ structure Request where
   headers : List (String × String) := []
   body : ByteArray := .empty
   timeoutMs : UInt32 := 30000
+  /-- The URL is untrusted (a link in a mail, a configured third-party endpoint): HTTPS only, no
+  redirects, no proxy, and never to a loopback, private, link-local or CGNAT address, whatever
+  the name resolves to; a smaller response cap. Hosts that cannot enforce it may refuse. -/
+  safe : Bool := false
   deriving Inhabited
 
 structure Response where

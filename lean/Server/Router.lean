@@ -18,13 +18,22 @@ import Server.Log
    `.session` the `lm_session` cookie plus CSRF on mutations (`Server.Auth.Session`);
    `.token s` a bearer `lm1…` token with scope `s` (`Server.Auth.ApiTokens`) or a session;
    `.admin` the Worker's `x-admin-account` with a valid internal secret, or an admin's own
-   session (`Server.Operator`), operator container only. -/
+   session (`Server.Operator`), operator container only; a mutation (not GET/HEAD) also needs
+   `Origin` equal to `PUBLIC_ORIGIN` and `X-Requested-With: LeanMail` (`adminCsrfOk`), which the
+   Worker checks too. -/
 
 namespace Server.Router
 
 open Lean
 
 abbrev Granted := Principal × List (String × String)
+
+/-- An admin mutation came from our own page's script: `Origin` is exactly `PUBLIC_ORIGIN` and
+`X-Requested-With: LeanMail` is set. GET and HEAD need neither. -/
+def adminCsrfOk (cfg : Config) (req : Req) : Bool :=
+  if req.method == "GET" || req.method == "HEAD" then true else
+  let trim (s : String) := if s.endsWith "/" then String.ofList s.toList.dropLast else s
+  (req.header? "origin").any (trim · == cfg.origin) && req.header? "x-requested-with" == some "LeanMail"
 
 /-- The principal the request may act as, plus headers to add to the response (a sliding
 session's new cookie), or the refusal. -/
@@ -49,6 +58,7 @@ def authorize (st : State) (auth : Auth) (req : Req) : IO (Except Resp Granted) 
   | .admin =>
     if !cfg.isOperator then return .error Resp.notFound
     if dev then return .ok (.admin "dev", [])
+    if !adminCsrfOk cfg req then return .error (Resp.error 403 "csrf")
     match req.header? "x-admin-account" with
     | some acct =>
       if internalOk st req && (← Operator.isAdminAccount st acct) then return .ok (.admin acct, [])
@@ -60,10 +70,13 @@ def authorize (st : State) (auth : Auth) (req : Req) : IO (Except Resp Granted) 
         return .error (Resp.error 403 "forbidden")
       | .error r => return .error r
 
-def dispatch (st : State) (routes : Array Route) (req : Req) : IO Resp := do
+/-- Route `req`. A path no route has is `notFound` (the JSON 404 unless told: `Server.Routes`
+passes the HTML page for a browser). -/
+def dispatch (st : State) (routes : Array Route) (req : Req)
+    (notFound : Req → IO Resp := fun _ => pure Resp.notFound) : IO Resp := do
   let candidates := routes.filterMap fun r => (matchPath r.pattern req.path).map (r, ·)
   match candidates.find? (·.1.method == req.method) with
-  | none => return if candidates.isEmpty then Resp.notFound else Resp.error 405 "method not allowed"
+  | none => if candidates.isEmpty then notFound req else return Resp.error 405 "method not allowed"
   | some (r, params) =>
     match ← authorize st r.auth req with
     | .error resp => return resp

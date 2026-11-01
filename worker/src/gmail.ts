@@ -1,6 +1,7 @@
 import { proxyTo } from "./auth";
 import type { Env } from "./env";
 import { errText, log } from "./log";
+import { safeDecode } from "./paths";
 import { ACCOUNT_RE, b64uEncode, deriveInternalSecret, secretEqual, verifyMac } from "./tokens";
 import { callContainer } from "./wake";
 
@@ -67,8 +68,12 @@ export async function handleGmailHook(request: Request, env: Env, ctx: Execution
   const m = /^\/hooks\/gmail\/([^/]+)\/([^/]+)$/.exec(new URL(request.url).pathname);
   if (!m) return text(404);
   if (request.method !== "POST") return text(405);
-  const acct = decodeURIComponent(m[1]!);
-  const sig = decodeURIComponent(m[2]!);
+  const acct = safeDecode(m[1]!);
+  const sig = safeDecode(m[2]!);
+  if (acct === null || sig === null) {
+    await request.body?.cancel();
+    return text(400);
+  }
   if (!env.INTERNAL_SECRET || !ACCOUNT_RE.test(acct) || !(await secretEqual(sig, await gmailHookSig(env.INTERNAL_SECRET, acct)))) {
     log("gmail.hook_refused", { configured: !!env.INTERNAL_SECRET });
     await request.body?.cancel();

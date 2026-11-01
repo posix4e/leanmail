@@ -1,4 +1,5 @@
 import Server
+import Std.Http
 import Core.Query
 import Core.Search
 import Core.Mime.Date
@@ -280,9 +281,12 @@ def setCookie? (r : Router.Resp) : Option String :=
     let first := (v.splitOn ";").headD ""
     if first.startsWith "lm_session=" then some (String.ofList (first.toList.drop 11)) else none
 
-/-- The raw mail of a recorded `/internal/email/send`. -/
+/-- The raw mail of a recorded `/internal/email/send`; for a `/internal/email/signin` (which the
+Worker builds itself), its link and code as the mail would say them. -/
 def sentRaw (j : Lean.Json) : String :=
-  String.fromUTF8? (Core.Base64.decode ((j.getObjValAs? String "raw_b64").toOption.getD "")) |>.getD ""
+  match (j.getObjValAs? String "link").toOption with
+  | some link => s!"{link}\nOr enter this code in the app: {(j.getObjValAs? String "code").toOption.getD ""}\n"
+  | none => String.fromUTF8? (Core.Base64.decode ((j.getObjValAs? String "raw_b64").toOption.getD "")) |>.getD ""
 
 def authChecks (t : IO.Ref Tally) : IO Unit := do
   let now ← Clock.nowMs
@@ -341,8 +345,8 @@ def authChecks (t : IO.Ref Tally) : IO Unit := do
   check t "provisioning creates the account once and mails one welcome link" <|
     p1.status == 200 && ((jsonOf p1).getObjValAs? Bool "created").toOption == some true &&
       ((jsonOf p2).getObjValAs? Bool "created").toOption == some false && c1.size == 1 &&
-      c1[0]!.1 == "POST" && c1[0]!.2.1 == "/internal/email/send" &&
-      (sentRaw c1[0]!.2.2).contains "Subject: Welcome to LeanMail" &&
+      c1[0]!.1 == "POST" && c1[0]!.2.1 == "/internal/email/signin" &&
+      (c1[0]!.2.2.getObjValAs? String "kind").toOption == some "welcome" &&
       ((← db.queryOne "SELECT purpose FROM magic_links").map (·.text "purpose")) == some "welcome"
   calls.set #[]
   let m0 ← send "POST" "/internal/auth/magic" internalH "{\"email\":\"eve@example.test\",\"purpose\":\"signin\"}"
@@ -354,14 +358,13 @@ def authChecks (t : IO.Ref Tally) : IO Unit := do
   let code := afterStr mail "enter this code in the app: "
   let req0 := (c2[0]?.map (·.2.2)).getD .null
   check t "a magic link for the account's email sends one mail with the link and the code" <|
-    m1.status == 202 && c2.size == 1 && c2[0]!.2.1 == "/internal/email/send" &&
-      (req0.getObjValAs? String "from").toOption == some "no-reply@mail.test" &&
-      (req0.getObjVal? "to").toOption == some (Lean.Json.arr #[Lean.Json.str "alex@example.test"]) &&
+    m1.status == 202 && c2.size == 1 && c2[0]!.2.1 == "/internal/email/signin" &&
+      (req0.getObjValAs? String "to").toOption == some "alex@example.test" &&
+      (req0.getObjValAs? String "kind").toOption == some "signin" &&
       (Auth.Tokens.verifyMagic cfg now link).isSome && code.length == 6 && code.toList.all Char.isDigit
-  check t "the mail has RFC 5322 headers and a ULID Message-ID" <|
-    mail.startsWith "From: no-reply@mail.test\r\nTo: alex@example.test\r\nSubject: Sign in to LeanMail\r\nDate: " &&
-      mail.contains "MIME-Version: 1.0\r\n" && mail.contains "Content-Type: text/plain; charset=utf-8\r\n" &&
-      Core.Ulid.isValid (String.ofList ((afterStr mail "Message-ID: <").toList.takeWhile (· != '@')))
+  check t "sec: sign-in mail goes to /internal/email/signin {to, kind, link, code}: no From, no raw message, the link on PUBLIC_ORIGIN" <|
+    (req0.getObjVal? "from").toOption.isNone && (req0.getObjVal? "raw_b64").toOption.isNone &&
+      ((req0.getObjValAs? String "link").toOption.map (·.startsWith "https://mail.test/auth/magic?t=")) == some true
   let bad ← send "GET" "/auth/magic" [] "" [("t", link ++ "x")]
   check t "a link with a bad MAC does not sign in" (bad.status == 400 && setCookie? bad == none)
   let g1 ← send "GET" "/auth/magic" [("user-agent", "test")] "" [("t", link)]
@@ -433,7 +436,16 @@ def authChecks (t : IO.Ref Tally) : IO Unit := do
     discard <| send "POST" "/auth/code" [] s!"\{\"email\":\"alex@example.test\",\"code\":\"{wrong3}\"}"
   let c5 ← send "POST" "/auth/code" [] s!"\{\"email\":\"alex@example.test\",\"code\":\"{code3}\"}"
   let l5 ← send "GET" "/auth/magic" [] "" [("t", link3)]
-  check t "five wrong codes burn the link: the right code and the link then fail" (c5.status == 400 && l5.status == 400)
+  check t "sec: five wrong codes lock that link's code, but never spend the link itself" (c5.status == 400 && l5.status == 302)
+  -- at most three live links: the next request is 202 and sends nothing
+  calls.set #[]
+  for _ in [0:4] do
+    discard <| send "POST" "/internal/auth/magic" internalH "{\"email\":\"alex@example.test\",\"purpose\":\"signin\"}"
+  let liveN := ((← db.queryOne "SELECT count(*) AS n FROM magic_links WHERE used_at IS NULL AND expires_at > ?" #[← Clock.nowMs]).map (·.nat "n")).getD 0
+  let capped ← send "POST" "/internal/auth/magic" internalH "{\"email\":\"alex@example.test\",\"purpose\":\"signin\"}"
+  check t "sec: at most three live magic links; a request beyond that is 202 and mails nothing" <|
+    liveN == 3 && capped.status == 202 && (← calls.get).size ≤ 3
+  db.exec "UPDATE magic_links SET used_at = 1 WHERE used_at IS NULL"
   -- sessions, logout, logout everywhere
   let sl ← send "GET" "/api/sessions" ck
   check t "GET /api/sessions lists the current session" (sl.status == 200 && sl.bodyText.contains "\"current\":true")
@@ -493,7 +505,8 @@ def authChecks (t : IO.Ref Tally) : IO Unit := do
   check t "a sign-up from ADMIN_EMAILS is approved at once as an admin" <|
     boss.status == 202 && (bossRow.map (·.text "status")) == some "active" && (bossRow.map (·.bool "is_admin")) == some true
   ocalls.set #[]
-  let adm := internalH ++ [("x-admin-account", bossId)]
+  let admNoCsrf := internalH ++ [("x-admin-account", bossId)]
+  let adm := admNoCsrf ++ [("origin", "https://mail.test"), ("x-requested-with", "LeanMail")]
   let noAdm ← osend ocfg "GET" "/admin/signups" (internalH ++ [("x-admin-account", newId)])
   let noSecret ← osend ocfg "GET" "/admin/signups" [("x-admin-account", bossId)]
   check t "/admin/* refuses a non-admin account and a missing internal secret" (noAdm.status == 403 && noSecret.status == 403)
@@ -501,6 +514,13 @@ def authChecks (t : IO.Ref Tally) : IO Unit := do
   let items := ((jsonOf ls).getObjValAs? (Array Lean.Json) "items").toOption.getD #[]
   let sid := (items[0]?.bind fun j => (j.getObjValAs? String "id").toOption).getD ""
   check t "GET /admin/signups lists the pending sign-up" (ls.status == 200 && ls.bodyText.contains "new@person.test" && !(ls.bodyText.contains "boss@op.test"))
+  let apNo ← osend ocfg "POST" s!"/admin/signups/{sid}/approve" admNoCsrf
+  let apEvil ← osend ocfg "POST" s!"/admin/signups/{sid}/approve" (admNoCsrf ++ [("origin", "https://evil.test"), ("x-requested-with", "LeanMail")])
+  let apNoXrw ← osend ocfg "POST" s!"/admin/signups/{sid}/approve" (admNoCsrf ++ [("origin", "https://mail.test")])
+  let lsNoCsrf ← osend ocfg "GET" "/admin/signups" admNoCsrf
+  check t "sec: an /admin mutation needs Origin = PUBLIC_ORIGIN and X-Requested-With: LeanMail; a GET needs neither" <|
+    apNo.status == 403 && apEvil.status == 403 && apNoXrw.status == 403 && lsNoCsrf.status == 200 &&
+      ((← odb.queryOne "SELECT status FROM accounts WHERE id = ?" #[newId]).map (·.text "status")) == some "pending"
   let ap ← osend ocfg "POST" s!"/admin/signups/{sid}/approve" adm
   let oc ← ocalls.get
   let acctRow ← odb.queryOne "SELECT status, approved_by FROM accounts WHERE id = ?" #[newId]
@@ -554,6 +574,38 @@ def authChecks (t : IO.Ref Tally) : IO Unit := do
     statuses := statuses.push r.status
   check t "sign-ups are limited to 10 an hour per IP" <|
     (statuses.extract 0 10).all (· == 202) && statuses[10]! == 429
+  -- a sign-up never changes an existing account's status
+  let openCfg : Config := { ocfg with signupMode := "open" }
+  ocalls.set #[]
+  let reDis ← osend openCfg "POST" "/auth/signup" (ip "6.6.6.6") "{\"email\":\"new@person.test\"}"
+  discard <| osend ocfg "POST" "/auth/signup" (ip "7.7.7.7") "{\"email\":\"p@person.test\"}"
+  let rePend ← osend openCfg "POST" "/auth/signup" (ip "7.7.7.8") "{\"email\":\"p@person.test\"}"
+  let statusOfEmail (e : String) : IO String := do
+    return ((← odb.queryOne "SELECT status FROM accounts WHERE email = ?" #[e]).map (·.text "status")).getD ""
+  check t "sec: a sign-up never re-activates a disabled account, and auto-approves only a new one (not a pending one)" <|
+    reDis.status == 202 && rePend.status == 202 && (← statusOfEmail "new@person.test") == "disabled" &&
+      (← statusOfEmail "p@person.test") == "pending" && !((← ocalls.get).any (·.2.1.startsWith "/internal/wake/"))
+  -- a Worker that is down at approval: recorded, then retried by a repeat sign-up or the tick lane
+  let downWorker : WorkerClient := { call := fun _ _ _ => pure none }
+  let ostDown : State := { ost with config := openCfg, worker := downWorker }
+  let sendDown (path body ipv : String) : IO Router.Resp :=
+    let r : Router.Req := { method := "POST", path := (path.splitOn "/").filter (· ≠ ""),
+                            headers := [("x-account-id", "_operator"), ("cf-connecting-ip", ipv)], body := body.toUTF8 }
+    Router.dispatch ostDown (Routes.all openCfg) r
+  discard <| sendDown "/auth/signup" "{\"email\":\"f@person.test\"}" "8.8.8.1"
+  discard <| sendDown "/auth/signup" "{\"email\":\"g@person.test\"}" "8.8.8.2"
+  let synced (e : String) : IO (Bool × Bool) := do
+    let r ← odb.queryOne "SELECT projected_at, provisioned_at FROM accounts WHERE email = ?" #[e]
+    return ((r.bind (·.nat? "projected_at")).isSome, (r.bind (·.nat? "provisioned_at")).isSome)
+  let fDown ← synced "f@person.test"
+  ocalls.set #[]
+  let reG ← osend openCfg "POST" "/auth/signup" (ip "8.8.8.3") "{\"email\":\"g@person.test\"}"
+  let gAfter ← synced "g@person.test"
+  let ran ← Jobs.tick { ost with config := openCfg } false
+  let fAfter ← synced "f@person.test"
+  check t "sec: a failed projection or provisioning is recorded and retried by a repeat sign-up and the pending_projection lane" <|
+    (← statusOfEmail "f@person.test") == "active" && fDown == (false, false) && reG.status == 202 && gAfter == (true, true) &&
+      ran.contains "pending_projection" && fAfter == (true, true)
   let devCfg : Config := { ocfg with publicOrigin := "http://localhost:8787", internalSecret := "", devBypass := true }
   let devAdm ← osend devCfg "GET" "/admin/accounts"
   check t "the dev bypass is an admin on a bare operator" (devAdm.status == 200)
@@ -566,7 +618,7 @@ def count (s sub : String) : Nat := (s.splitOn sub).length - 1
 /-- The page security headers, all of them. -/
 def pageHeadersOk (r : Router.Resp) : Bool :=
   r.headers.lookup "Content-Security-Policy" == some Pages.csp &&
-    r.headers.lookup "Referrer-Policy" == some "no-referrer" &&
+    r.headers.lookup "Referrer-Policy" == some "same-origin" &&
     r.headers.lookup "X-Content-Type-Options" == some "nosniff" &&
     r.headers.lookup "Content-Type" == some "text/html; charset=utf-8"
 
@@ -734,6 +786,15 @@ def pageChecks (t : IO.Ref Tally) : IO Unit := do
   check t "a cookie form post needs Origin = PUBLIC_ORIGIN or Sec-Fetch-Site: same-origin" <|
     noOrigin.status == 403 && evilOrigin.status == 403 && sameOrigin.status == 303 && fetchSite.status == 303 &&
       pageHeadersOk noOrigin
+  -- Chrome under a strict referrer policy says `Origin: null` on its own form posts
+  let nullOnly ← go st2 (req "POST" s!"/m/{mid.id}/action" (ck ++ html ++ form ++ [("origin", "null")]) [] "action=junk")
+  let nullCross ← go st2 (req "POST" s!"/m/{mid.id}/action" (ck ++ html ++ form ++ [("origin", "null"), ("sec-fetch-site", "cross-site")]) [] "action=junk")
+  let nullSame ← go st2 (req "POST" s!"/m/{mid.id}/action" (ck ++ html ++ form ++ [("origin", "null"), ("sec-fetch-site", "same-origin")]) [] "action=notjunk")
+  check t "sec: Origin: null passes the form rule only with Sec-Fetch-Site: same-origin; pages send Referrer-Policy: same-origin" <|
+    nullOnly.status == 403 && nullCross.status == 403 && nullSame.status == 303 &&
+      noOrigin.headers.lookup "Referrer-Policy" == some "same-origin" &&
+      Auth.Session.csrfOk {} { method := "POST", path := [], headers := [("origin", "null"), ("sec-fetch-site", "same-origin"), ("x-requested-with", "LeanMail")] } &&
+      !Auth.Session.csrfOk {} { method := "POST", path := [], headers := [("origin", "null"), ("x-requested-with", "LeanMail")] }
   let mine ← go st2 (req "GET" "/inbox" (ck ++ html))
   check t "the session cookie opens /inbox" (mine.status == 200 && has mine.bodyText "alex@example.test")
   -- the web code sign-in: POST /signin mails a code, POST /signin/code starts a session
@@ -914,6 +975,24 @@ def sendChecks (t : IO.Ref Tally) : IO Unit := do
   let statusOf (r : Except Send.Fail Send.Outcome) : Nat := match r with | .error f => f.status | .ok _ => 200
   check t "an unsendable from is 403; a sending domain, a can_send address and default_from are allowed" <|
     statusOf rEve == 403 && statusOf rNo == 403 && statusOf rDom == 200 && statusOf rAddr == 200 && statusOf rDef == 200
+  -- MAIL_FROM is nobody's From: not via an address row, not via default_from, not under the dev bypass
+  let stMf : State := { st with config := { st.config with mailFrom := "no-reply@fralex.art" } }
+  db.exec "INSERT INTO addresses(address, domain, mail, can_send, created_at, updated_at) VALUES ('no-reply@fralex.art', 'fralex.art', 'vault', 1, 0, 0)"
+  let mfDev ← Send.sendable stMf .dev "no-reply@fralex.art"
+  let mfSes ← Send.sendable stMf (.session "s1") "No-Reply@fralex.art"
+  let mfChoices ← Send.fromChoices stMf
+  let reqMf : Router.Req := { method := "PATCH", path := ["api", "account"], body := "{\"default_from\":\"no-reply@fralex.art\"}".toUTF8
+                              headers := [("x-account-id", "dev"), ("content-type", "application/json")] }
+  let pMf ← Router.dispatch stMf (Routes.all stMf.config) reqMf
+  let asSes (b : String) : IO Router.Resp :=
+    Account.patch ({ st := st, account := "dev", auth := .session, principal := .session "s1" } : Router.Ctx) ({ method := "PATCH", path := [], body := b.toUTF8 } : Router.Req)
+  let pEve ← asSes "{\"default_from\":\"eve@evil.test\"}"
+  let pDom ← asSes "{\"default_from\":\"anyone@fralex.art\"}"
+  let pBack ← asSes "{\"default_from\":\"alex@fralex.art\"}"
+  check t "sec: MAIL_FROM is refused as a From for everyone, and PATCH /api/account default_from must be sendable" <|
+    !mfDev && !mfSes && !mfChoices.contains "no-reply@fralex.art" && pMf.status == 400 && pEve.status == 400 &&
+      pDom.status == 200 && pBack.status == 200
+  db.exec "DELETE FROM addresses WHERE address = 'no-reply@fralex.art'"
 
   -- drafts
   let did := ulidN 20
@@ -2205,10 +2284,8 @@ def m6bChecks (t : IO.Ref Tally) : IO Unit := do
   -- MCP tools against the server functions
   let (e1, s1) := toolOut (← go st (mcpReq rtok (mcpCall "search_mail" "{\"query\":\"labels\"}")))
   let ids1 := (jItems s1).map (jS · "id")
-  let heldItem := (jItems s1).find? (jS · "id" == pv)
-  check t "m6b: search_mail round trip finds the thread and withholds the privileged hit" <|
-    !e1 && ids1.contains q1 && ids1.contains q2 && ids1.contains pv &&
-      (heldItem.map fun h => jB h "withheld" && !(h.getObjVal? "subject").isOk) == some true &&
+  check t "m6b: search_mail round trip finds the thread and leaves out the privileged hit, id and all (counted in withheld)" <|
+    !e1 && ids1.contains q1 && ids1.contains q2 && !ids1.contains pv && !has s1.compress pv &&
       (s1.getObjValAs? Nat "withheld").toOption == some 1 &&
       ((jItems s1).find? (jS · "id" == q1)).map (jS · "subject") == some "Quote for 500 labels"
   let (eg, g1) := toolOut (← go st (mcpReq rtok (mcpCall "get_message" s!"\{\"id\":\"{q1}\"}")))
@@ -2221,8 +2298,8 @@ def m6bChecks (t : IO.Ref Tally) : IO Unit := do
       eMissing && jS gm "error" == "not found"
   let (eR, rec) := toolOut (← go st (mcpReq rtok (mcpCall "recent_mail" "{\"limit\":10}")))
   let (eBadF, _) := toolOut (← go st (mcpReq rtok (mcpCall "recent_mail" "{\"filter\":\"nope\"}")))
-  check t "m6b: recent_mail lists the inbox with the privileged entry withheld; a bad filter is an error" <|
-    !eR && (jItems rec).size == 3 && ((jItems rec).filter (jB · "withheld")).size == 1 && eBadF
+  check t "m6b: recent_mail lists the inbox without the privileged entry (counted in withheld); a bad filter is an error" <|
+    !eR && (jItems rec).size == 2 && (rec.getObjValAs? Nat "withheld").toOption == some 1 && !has rec.compress pv && eBadF
   let (eA, accJ) := toolOut (← go st (mcpReq rtok (mcpCall "account_status" "{}")))
   let pw := (accJ.getObjVal? "privileged_withheld").toOption.getD .null
   check t "m6b: account_status reports health, the account and the privileged counts" <|
@@ -2317,10 +2394,10 @@ def m6bChecks (t : IO.Ref Tally) : IO Unit := do
   let lstAi ← go stAi { method := "GET", path := ["api", "msgs"], headers := bearer rtok }
   let item1 := (jItems (jsonOf lstAi)).find? (jS · "id" == q1)
   let itemP := (jItems (jsonOf lstAi)).find? (jS · "id" == pv)
-  check t "m6b: the list item carries triage {label, priority}; untriaged mail has none" <|
+  check t "m6b: the list item carries triage {label, priority}; the privileged message is not in a token's list at all" <|
     (item1.bind fun i => (i.getObjVal? "triage").toOption.map (·.compress)) ==
       some (Lean.Json.mkObj [("label", Lean.Json.str "needs_reply"), ("priority", Lean.Json.num 4)]).compress &&
-      (itemP.map fun i => !(i.getObjVal? "triage").isOk) == some true
+      itemP.isNone
   let stDevAi : State := { stAi with config := { aiCfg with devBypass := true, accountId := "dev", internalSecret := "", publicOrigin := "http://127.0.0.1:8787" } }
   let inboxAi ← go stDevAi { method := "GET", path := ["inbox"], headers := dev }
   check t "m6b: the inbox renders the triage chip" (inboxAi.status == 200 && has inboxAi.bodyText "badge ai ai-needs_reply" && has inboxAi.bodyText ">needs reply<")
@@ -2763,6 +2840,263 @@ def m9bChecks (t : IO.Ref Tally) : IO Unit := do
   m9bPasskeys t
   m9bSignup t
 
+/-! ## Security review fixes -/
+
+/-- The raw path the server would route on, from a request target as a client sent it. -/
+def rawOf (target : String) : String :=
+  match Std.Http.RequestTarget.parse? target with
+  | some rt => toString rt.pathOrRoot
+  | none => "//unparseable"
+
+def secChecks (t : IO.Ref Tally) : IO Unit := do
+  -- (2) path tricks never reach internal routes
+  let tricks := ["/%69nternal/health", "//internal/health", "/internal//health", "/./internal/health",
+                 "/api/../internal/health", "/internal/%2e%2e/health", "/api%2Finternal/health", "/%2e/internal"]
+  check t "sec: /%69nternal/health, //internal/health, /internal//health and other path tricks are refused before routing" <|
+    tricks.all (fun p => !Router.rawPathOk (rawOf p)) && Router.rawPathOk (rawOf "/internal/health") &&
+      Router.rawPathOk (rawOf "/") && Router.rawPathOk (rawOf "/inbox/") && Router.rawPathOk (rawOf "/api/msg/01ABC?x=1") &&
+      Router.rawPathOk (rawOf "/api/config/addresses/shop@fralex.art") && Router.rawPathOk (rawOf "/static/app.css")
+  let cfg : Config := { accountId := "acct1", sessionSecret := "k1", publicOrigin := "https://mail.test", internalSecret := "s3cret" }
+  let db ← Db.openMemory
+  discard <| Schema.migrate db
+  let (_, worker) ← recorder
+  let st : State := { config := cfg, db, store := ← Store.memory, worker, startedAt := 0, schemaVersion := 3, fts5 := true }
+  let wakeReq (hs : List (String × String)) : Router.Req := { method := "POST", path := ["internal", "wake"], headers := hs }
+  let viaWorker ← Router.dispatch st (Routes.all cfg) (wakeReq [("x-account-id", "acct1"), ("x-internal-secret", "s3cret")])
+  let fromClient ← Router.dispatch st (Routes.all cfg) (wakeReq [("x-account-id", "acct1"), ("x-internal-secret", "s3cret"), ("x-lm-public", "1")])
+  let bareSt : State := { st with config := {} }
+  check t "sec: x-lm-public (a client request the Worker forwarded) is never internal, even with the right secret" <|
+    viaWorker.status == 200 && fromClient.status == 401 &&
+      !Router.internalOk st { method := "GET", path := [], headers := [("x-internal-secret", "s3cret"), ("x-lm-public", "1")] } &&
+      !Router.internalOk bareSt { method := "GET", path := [], headers := [("x-lm-public", "1")] } &&
+      Router.internalOk bareSt { method := "GET", path := [] }
+
+  -- (1) routing: only granted domains
+  let gCalls ← IO.mkRef (#[] : Array (String × String))
+  let grantsUp ← IO.mkRef true
+  let gWorker : WorkerClient := { call := fun m p _ => do
+    gCalls.modify (·.push (m, p))
+    if p == "/internal/grants" then
+      if !(← grantsUp.get) then return none
+      return some (Lean.Json.mkObj [("domains", Lean.Json.arr #[Lean.Json.str "fralex.art"])])
+    return some (Lean.Json.mkObj [("ok", Lean.Json.bool true)]) }
+  let gDb ← Db.openMemory
+  discard <| Schema.migrate gDb
+  let gSt : State := { config := cfg, db := gDb, store := ← Store.memory, worker := gWorker, startedAt := 0, schemaVersion := 3, fts5 := true }
+  let addOk ← Routing.addDomain gSt (Lean.Json.mkObj [("name", Lean.Json.str "fralex.art")])
+  let addNo ← Routing.addDomain gSt (Lean.Json.mkObj [("name", Lean.Json.str "other.example")])
+  grantsUp.set false
+  let addDown ← Routing.addDomain gSt (Lean.Json.mkObj [("name", Lean.Json.str "second.fralex.art")])
+  grantsUp.set true
+  let opSt : State := { gSt with config := { cfg with role := "operator" }, db := ← Db.openMemory }
+  discard <| Schema.migrate opSt.db
+  gCalls.set #[]
+  let addOp ← Routing.addDomain opSt (Lean.Json.mkObj [("name", Lean.Json.str "anything.example")])
+  let errOf (r : Except (Nat × String) Unit) : Nat × String := match r with | .ok () => (200, "") | .error e => e
+  check t "sec: routing: an account adds only granted domains (GET /internal/grants), fails closed, the operator any" <|
+    errOf addOk == (200, "") && errOf addNo == (403, "domain_not_granted") && errOf addDown == (403, "domain_not_granted") &&
+      errOf addOp == (200, "") && (← gCalls.get).isEmpty
+  -- a domain held from before the grants is not planned, and no other zone is ever listed
+  gDb.exec "INSERT INTO domains (name, manage, default_mail, default_forward_to, sending, created_at, updated_at) VALUES ('other.example', 1, 'vault', '[]', '[]', 0, 0)"
+  let cf ← FakeCf.new
+  let cfSt : State := { gSt with config := { cfg with cfApiToken := "tok", cfAccountId := "acc", cfApiBase := "https://cf.test/client/v4" }, cloudflare := cf.api }
+  let pl ← Routing.planNow cfSt
+  let plJson := (pl.toJson true).compress
+  let cfPaths := (← cf.calls.get).map (·.2.1)
+  check t "sec: routing: the plan reads and changes only granted zones and never lists other zones or destinations" <|
+    pl.ok && pl.ops.all (·.domain == "fralex.art") && pl.problems.any (fun x => x.code == "domain_not_granted" && x.domain == some "other.example") &&
+      !cfPaths.any (has · "/zones/z9") && !has plJson "z9" && !has plJson "alex@gmail.com" && !has plJson "other_zones"
+  -- an account container without the token: Cloudflare is the operator's
+  let ctxA : Router.Ctx := { st := gSt, account := "acct1", auth := .session, principal := .session "s" }
+  let pg ← Routing.planGet ctxA { method := "GET", path := [] }
+  let ap ← Routing.applyPost ctxA { method := "POST", path := [], body := "{}".toUTF8 }
+  check t "sec: routing: an account container without CF_API_TOKEN answers plan and apply 503 routing_needs_operator" <|
+    pg.status == 503 && jget pg "error" == "routing_needs_operator" && ap.status == 503 && jget ap "error" == "routing_needs_operator"
+  -- the operator plans and applies for the account (the Worker's forward, faked here)
+  let opDb ← Db.openMemory
+  discard <| Schema.migrate opDb
+  opDb.exec "INSERT INTO domain_grants(domain, account_id, created_at) VALUES ('fralex.art', 'acct1', 0)"
+  let cfOp ← FakeCf.new
+  let opCfg : Config := { accountId := "_operator", role := "operator", sessionSecret := "k1", publicOrigin := "https://mail.test",
+                          internalSecret := "opsec", cfApiToken := "tok", cfAccountId := "acc", cfApiBase := "https://cf.test/client/v4" }
+  let opState : State := { config := opCfg, db := opDb, store := ← Store.memory, worker, startedAt := 0, schemaVersion := 3,
+                           fts5 := true, cloudflare := cfOp.api }
+  let opReq (path : List String) (hs : List (String × String)) (b : String) : Router.Req :=
+    { method := "POST", path, headers := [("x-account-id", "_operator"), ("x-internal-secret", "opsec")] ++ hs, body := b.toUTF8 }
+  let fwdWorker : WorkerClient := {
+    call := gWorker.call
+    callStatus := fun m p j => do
+      if p.startsWith "/internal/routing/" then
+        let r ← Routes.dispatch opState (opReq ((p.splitOn "/").filter (· ≠ "")) [("x-routing-account", "acct1")] j.compress)
+        return some (r.status, jsonOf r)
+      return (← gWorker.call m p j).map ((200, ·)) }
+  let fSt : State := { gSt with worker := fwdWorker }
+  let ctxF : Router.Ctx := { st := fSt, account := "acct1", auth := .session, principal := .session "s" }
+  let fpg ← Routing.planGet ctxF { method := "GET", path := [] }
+  let fpj := jsonOf fpg
+  let fKinds := ((fpj.getObjValAs? (Array Lean.Json) "ops").toOption.getD #[]).map fun o => (o.getObjValAs? String "kind").toOption.getD ""
+  check t "sec: routing: an account container's plan is made by the operator through the Worker, for its granted domains only" <|
+    fpg.status == 200 && has fpg.bodyText "\"can_apply\":true" && fKinds == #["catch_all.set", "rule.delete"] &&
+      has fpg.bodyText "domain_not_granted" && !has fpg.bodyText "z9" &&
+      !((← cfOp.calls.get).any fun (_, path, _) => has path "/zones/z9")
+  let fap ← Routing.applyPost ctxF { method := "POST", path := [], body := (Lean.Json.mkObj [("plan_id", (fpj.getObjVal? "id").toOption.getD .null)]).compress.toUTF8 }
+  let lastApply ← gDb.queryOne "SELECT value FROM settings WHERE key = 'routing.last_apply'"
+  check t "sec: routing: apply goes through the operator with its token, and the account keeps routing.last_apply" <|
+    fap.status == 200 && (← cfOp.catchAll.get) == "leanmail" && lastApply.isSome &&
+      (← opDb.queryOne "SELECT value FROM settings WHERE key = 'routing.last_apply'").isNone
+  let opBad ← Routes.dispatch opState (opReq ["internal", "routing", "plan"] [("x-routing-account", "acct1")]
+    "{\"domains\":[{\"name\":\"other.example\",\"manage\":true,\"default\":{\"mail\":\"vault\",\"forward_to\":[]},\"sending\":[]}],\"addresses\":[]}")
+  let opOther ← Routes.dispatch opState (opReq ["internal", "routing", "plan"] [("x-routing-account", "acct2")]
+    "{\"domains\":[{\"name\":\"fralex.art\"}],\"addresses\":[]}")
+  let opNoAcct ← Routes.dispatch opState (opReq ["internal", "routing", "plan"] [] "{\"domains\":[]}")
+  let opPublic ← Routes.dispatch opState (opReq ["internal", "routing", "plan"] [("x-routing-account", "acct1"), ("x-lm-public", "1")] "{\"domains\":[]}")
+  let notInAccount ← Routes.dispatch gSt { method := "POST", path := ["internal", "routing", "plan"],
+                                           headers := [("x-account-id", "acct1"), ("x-internal-secret", "s3cret")] }
+  check t "sec: routing: the operator refuses a domain not granted to the routing account (403), no account (400), a client (401)" <|
+    opBad.status == 403 && jget opBad "error" == "domain_not_granted" && opOther.status == 403 && opNoAcct.status == 400 &&
+      opPublic.status == 401 && notInAccount.status == 404
+
+  -- (5) privileged mail is withheld from API tokens, not from sessions
+  let wDb ← Db.openMemory
+  discard <| Schema.migrate wDb
+  let (wCalls, wWorker) ← recorder
+  let wSt : State := { config := cfg, db := wDb, store := ← Store.memory, worker := wWorker, startedAt := 0, schemaVersion := 3, fts5 := true }
+  wDb.exec "INSERT INTO account(id, email, display_name, default_from, created_at, updated_at) VALUES (1, 'alex@example.test', 'Alex', 'alex@example.test', 0, 0)"
+  let wNow ← Clock.nowMs
+  let putIng (raw : String) (n : Nat) : IO String := do
+    let id := Core.Ulid.encode (wNow - n) (ByteArray.mk #[1,2,3,4,5,6,7,8,9,n.toUInt8])
+    let key := s!"raw/acct1/{id}"
+    wSt.store.put key raw.toUTF8 []
+    return (← Ingest.ingest wSt { raw := raw.toUTF8, key := some key, rcpt := some "alex@example.test", source := "route", receivedAt := wNow - n, forcedId := some id }).id
+  let pvRaw := "From: Dana <dana@holt.example>\r\nTo: alex@example.test\r\nSubject: Settlement terms\r\nMessage-ID: <pv1@holt.example>\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: text/html\r\n\r\n<p>Settlement terms attached</p>\r\n--b\r\nContent-Type: application/pdf; name=\"t.pdf\"\r\nContent-Disposition: attachment\r\n\r\nPDF\r\n--b--\r\n"
+  let okRaw := "From: Tomas <tomas@labelforge.io>\r\nTo: alex@example.test\r\nSubject: Settlement of labels\r\nMessage-ID: <ok1@labelforge.io>\r\nContent-Type: text/html\r\n\r\n<p>hi <img src=\"https://t.example/x.png\"></p>\r\n"
+  let pv ← putIng pvRaw 10
+  let okId ← putIng okRaw 5
+  wDb.exec "UPDATE messages SET privileged = 1 WHERE id = ?" #[pv]
+  let pvThread := ((← wDb.queryOne "SELECT thread_id FROM messages WHERE id = ?" #[pv]).bind (·.text? "thread_id")).getD ""
+  let (_, wTok) ← Auth.ApiTokens.mint wSt "agent" ["read", "draft", "send"]
+  let wCk := ((← Auth.Session.create wSt "test").getD "")
+  let tokH := [("x-account-id", "acct1"), ("authorization", s!"Bearer {wTok}")]
+  let sesH := [("x-account-id", "acct1"), ("cookie", s!"lm_session={wCk}")]
+  let wGo (m : String) (path : List String) (hs : List (String × String)) (q : List (String × String) := []) (b : String := "") : IO Router.Resp :=
+    Router.dispatch wSt (Routes.all cfg) { method := m, path, query := q, headers := hs, body := b.toUTF8 }
+  let tMsg ← wGo "GET" ["api", "msg", pv] tokH
+  let tRaw ← wGo "GET" ["api", "msg", pv, "raw"] tokH
+  let tHtml ← wGo "GET" ["api", "msg", pv, "html"] tokH
+  let tAtt ← wGo "GET" ["api", "msg", pv, "attachments", "0"] tokH
+  let tList ← wGo "GET" ["api", "msgs"] tokH [("filter", "all")]
+  let tSearch ← wGo "GET" ["api", "search"] tokH [("q", "settlement")]
+  let tThread ← wGo "GET" ["api", "thread", pvThread] tokH
+  check t "sec: a token gets a privileged message as {id, withheld}; its raw, HTML and attachments are 403 privileged" <|
+    tMsg.status == 200 && (jsonOf tMsg).compress == (Lean.Json.mkObj [("id", Lean.Json.str pv), ("withheld", Lean.Json.bool true)]).compress &&
+      tRaw.status == 403 && jget tRaw "error" == "privileged" && tHtml.status == 403 && tAtt.status == 403 &&
+      !has tRaw.bodyText "Settlement" && !has tHtml.bodyText "Settlement"
+  check t "sec: a token's lists, search and threads leave privileged mail out" <|
+    tList.status == 200 && !has tList.bodyText pv && has tList.bodyText okId &&
+      tSearch.status == 200 && !has tSearch.bodyText pv && has tSearch.bodyText okId &&
+      tThread.status == 200 && !has tThread.bodyText pv && !has tThread.bodyText "Settlement"
+  let sMsg ← wGo "GET" ["api", "msg", pv] sesH
+  let sRaw ← wGo "GET" ["api", "msg", pv, "raw"] sesH
+  let sList ← wGo "GET" ["api", "msgs"] sesH [("filter", "all")]
+  check t "sec: a session keeps full access to privileged mail" <|
+    sMsg.status == 200 && jget sMsg "subject" == "Settlement terms" && sRaw.status == 200 && has sRaw.bodyText "Settlement" &&
+      has sList.bodyText pv
+  let dPut ← wGo "PUT" ["api", "drafts", Core.Ulid.encode wNow (ByteArray.mk #[9,9,9,9,9,9,9,9,9,9])] tokH []
+    s!"\{\"mutation_id\":\"m1\",\"to\":[\"bob@x.test\"],\"subject\":\"fwd\",\"forward_of\":\"{pv}\"}"
+  let dPutOk ← wGo "PUT" ["api", "drafts", Core.Ulid.encode wNow (ByteArray.mk #[9,9,9,9,9,9,9,9,9,8])] tokH []
+    s!"\{\"mutation_id\":\"m2\",\"to\":[\"bob@x.test\"],\"subject\":\"fwd\",\"forward_of\":\"{okId}\"}"
+  let sendReq (n : UInt8) (fwd rep : Option String) : Send.Request :=
+    { clientId := Core.Ulid.encode wNow (ByteArray.mk #[8,8,8,8,8,8,8,8,8,n]), from_ := "", to := [{ address := "bob@x.test" }],
+      subject := "x", text := "y", forwardOf := fwd, replyOf := rep }
+  let statusOf (r : Except Send.Fail Send.Outcome) : Nat × String := match r with | .error f => (f.status, f.error) | .ok _ => (200, "")
+  let sFwdTok ← Send.send wSt (.token "t1" ["send"]) (sendReq 1 (some pv) none)
+  let sRepTok ← Send.send wSt (.token "t1" ["send"]) (sendReq 2 none (some pv))
+  let sFwdSes ← Send.send wSt (.session "s1") (sendReq 3 (some pv) none)
+  let _ := wCalls
+  check t "sec: a token may not forward or reply to privileged mail (send and draft save are 403 privileged); a session may" <|
+    statusOf sFwdTok == (403, "privileged") && statusOf sRepTok == (403, "privileged") && (statusOf sFwdSes).1 == 200 &&
+      dPut.status == 403 && jget dPut "error" == "privileged" && dPutOk.status == 201
+  -- (10) the message HTML policy and the raw download
+  let hPlain ← wGo "GET" ["api", "msg", okId, "html"] sesH
+  let hImg ← wGo "GET" ["api", "msg", okId, "html"] sesH [("images", "1")]
+  let rawDl ← wGo "GET" ["api", "msg", okId, "raw"] sesH
+  check t "sec: message HTML is sandboxed with no remote images, forms or base; ?images=1 adds https: to img-src" <|
+    hPlain.headers.lookup "Content-Security-Policy" == some "sandbox; default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'" &&
+      hImg.headers.lookup "Content-Security-Policy" == some "sandbox; default-src 'none'; img-src data: cid: https:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"
+  check t "sec: /raw is an attachment <id>.eml under a sandbox CSP" <|
+    rawDl.status == 200 && rawDl.headers.lookup "Content-Disposition" == some s!"attachment; filename=\"{okId}.eml\"" &&
+      rawDl.headers.lookup "Content-Security-Policy" == some "sandbox"
+  -- (7) outbound requests to untrusted URLs
+  let urls := [("https://news.example.com/u?x=1", true), ("https://News.Example.com:8443/u", true),
+    ("https://user@news.example.com/u", false), ("https://127.0.0.1/u", false), ("https://2130706433/u", false),
+    ("https://0x7f000001/u", false), ("https://[::1]/u", false), ("https://localhost/u", false), ("https://a.internal/u", false),
+    ("https://news.example.com/u#frag", false), ("https://news.example.com\\@evil.example/u", false),
+    ("http://news.example.com/u", false), ("https://news.example.com:80x/u", false), ("https://10.0.0.1/u", false)]
+  check t "sec: a one-click unsubscribe URL must be https with a DNS name: no userinfo, fragment, backslash or address literal" <|
+    urls.all fun (u, ok) => (Junk.safeUnsubUrl? u).isSome == ok
+  let webSafe ← IO.mkRef (#[] : Array (String × Bool))
+  let unSt : State := { wSt with web := { request := fun r => do
+    webSafe.modify (·.push (r.url, r.safe)); return { status := 200, headers := [], body := .empty } } }
+  let news (n : Nat) (url : String) : IO String := do
+    let raw := s!"From: News <n@news.example.com>\r\nTo: alex@example.test\r\nSubject: News {n}\r\nMessage-ID: <news{n}@news.example.com>\r\nList-Unsubscribe: <{url}>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n\r\nhello\r\n"
+    putIng raw (20 + n)
+  let nOk ← news 1 "https://news.example.com/u/1"
+  let nUser ← news 2 "https://user@news.example.com/u/2"
+  let nIp ← news 3 "https://127.0.0.1/u/3"
+  let uOk ← Junk.unsubscribe unSt nOk
+  let uUser ← Junk.unsubscribe unSt nUser
+  let uIp ← Junk.unsubscribe unSt nIp
+  let statusJ (r : Junk.Result) : String := match r with
+    | .ok j => (j.getObjValAs? String "status").toOption.getD ""
+    | .error _ => "error"
+  check t "sec: the one-click POST is made under the safe profile; a URL that fails the strict parse is left to the reader" <|
+    statusJ uOk == "unsubscribed" && statusJ uUser == "manual" && statusJ uIp == "manual" &&
+      (← webSafe.get) == #[("https://news.example.com/u/1", true)]
+  let blocked (u : String) : IO Bool := do
+    try discard <| Http.request { url := u, safe := true, timeoutMs := 3000 }; pure false
+    catch e => pure (has (toString e) "blocked")
+  let b4 ← blocked "https://127.0.0.1:1/"
+  let b10 ← blocked "https://10.255.255.1:1/"
+  let b6 ← blocked "https://[::1]:1/"
+  let bMapped ← blocked "https://[::ffff:127.0.0.1]:1/"
+  let bLink ← blocked "https://169.254.169.254:1/"
+  let bCgnat ← blocked "https://100.64.0.1:1/"
+  let plainHttp ← (do discard <| Http.request { url := "http://127.0.0.1:1/", safe := true, timeoutMs := 3000 }; pure "ok") <|> (pure "refused")
+  check t "sec: the safe profile never connects to loopback, private, link-local, CGNAT or mapped IPv6 addresses, nor over http" <|
+    b4 && b10 && b6 && bMapped && bLink && bCgnat && plainHttp == "refused"
+  let refusedCtl (r : Core.Http.Request) : IO Bool := do
+    try discard <| Http.request r; pure false
+    catch e => pure (has (toString e) "control character")
+  let ctlUrl ← refusedCtl { url := "https://127.0.0.1:1/\r\nX-Evil: 1", timeoutMs := 1000 }
+  let ctlHdr ← refusedCtl { url := "https://127.0.0.1:1/", headers := [("X-A", "v\r\nX-Evil: 1")], timeoutMs := 1000 }
+  let ctlNul ← refusedCtl { url := "https://127.0.0.1:1/\x00x", timeoutMs := 1000 }
+  check t "sec: a URL or header value with CR, LF or NUL is refused before libcurl" (ctlUrl && ctlHdr && ctlNul)
+  -- browser polish: /signin?sent=1, the HTML 404, /favicon.ico
+  let sent ← Routes.dispatch wSt { method := "GET", path := ["signin"], query := [("sent", "1"), ("email", "alex@example.test")],
+                                   headers := [("x-account-id", "acct1"), ("accept", "text/html")] }
+  let plainSignin ← Routes.dispatch wSt { method := "GET", path := ["signin"], headers := [("x-account-id", "acct1"), ("accept", "text/html")] }
+  check t "/signin?sent=1 shows the check-your-mail notice and the code form for the address" <|
+    sent.status == 200 && has sent.bodyText "Check your mail" && has sent.bodyText "action=\"/signin/code\"" &&
+      has sent.bodyText "value=\"alex@example.test\"" && !has plainSignin.bodyText "Check your mail"
+  let nfHtml ← Routes.dispatch wSt { method := "GET", path := ["no", "such", "page"], headers := sesH ++ [("accept", "text/html")] }
+  let nfAnon ← Routes.dispatch wSt { method := "GET", path := ["nope"], headers := [("x-account-id", "acct1"), ("accept", "text/html,*/*")] }
+  let nfJson ← Routes.dispatch wSt { method := "GET", path := ["no", "such", "page"], headers := sesH ++ [("accept", "application/json")] }
+  check t "an unknown path is the HTML 404 page for a browser (framed when signed in) and JSON for everyone else" <|
+    nfHtml.status == 404 && nfHtml.headers.lookup "Content-Type" == some "text/html; charset=utf-8" && has nfHtml.bodyText "Alex" &&
+      nfAnon.status == 404 && nfAnon.headers.lookup "Content-Type" == some "text/html; charset=utf-8" &&
+      nfJson.status == 404 && nfJson.headers.lookup "Content-Type" == some "application/json"
+  let fav ← Routes.dispatch wSt { method := "GET", path := ["favicon.ico"], headers := [("x-account-id", "acct1")] }
+  check t "GET /favicon.ico is 204 with a day of caching, never a 401 or 404" <|
+    fav.status == 204 && fav.headers.lookup "Cache-Control" == some "public, max-age=86400"
+  -- (11) a deployed config without real secrets does not boot
+  check t "sec: outside a bare localhost run the server refuses to boot with the default SESSION_SECRET or an empty INTERNAL_SECRET" <|
+    (({} : Config).refusal?).isNone &&
+      (({ publicOrigin := "https://mail.test" } : Config).refusal?).isSome &&
+      (({ publicOrigin := "https://mail.test", sessionSecret := "" , internalSecret := "y" } : Config).refusal?).isSome &&
+      (({ publicOrigin := "https://mail.test", sessionSecret := "x" } : Config).refusal?).isSome &&
+      (({ internalSecret := "y" } : Config).refusal?).isSome &&
+      (({ publicOrigin := "https://mail.test", sessionSecret := "x", internalSecret := "y" } : Config).refusal?).isNone
+
 def main (_ : List String) : IO UInt32 := do
   let t ← IO.mkRef ({} : Tally)
   -- crypto vectors (FIPS 180-2 and RFC 4231)
@@ -2820,6 +3154,7 @@ def main (_ : List String) : IO UInt32 := do
   m7Checks t
   m6bChecks t
   m9bChecks t
+  secChecks t
   let r ← t.get
   IO.println s!"{r.passed} passed, {r.failed} failed"
   return if r.failed == 0 then 0 else 1

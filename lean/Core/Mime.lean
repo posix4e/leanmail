@@ -325,6 +325,8 @@ mutual
     let mut w := w
     let mut alternative := alternative
     let mut related := related
+    -- past a parser cap (`Parse.maxDepth`, `Parse.maxParts`): neither text nor an attachment
+    if n.sealed then return w
     match n.multipart with
     | none =>
       let inlineRfc := isInlineRfc822 n && !force

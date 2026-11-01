@@ -9,8 +9,14 @@ import Server.Ingest
 import Server.Clock
 import Server.Crypto
 import Server.Log
+import Server.AI
 
-/-! # The JSON API (M1): list, search, read, raw, attachments, threads, import, wake, tick -/
+/-! # The JSON API (M1): list, search, read, raw, attachments, threads, import, wake, tick
+
+**Privileged mail and tokens.** An API token (an app, a script, an agent: anything that is not a
+person in the browser) never sees privileged mail (`AI.withheldSql`): the lists, search and
+threads leave such messages out, `/api/msg/:id` answers `{id, withheld: true}`, and its raw, HTML
+and attachments are 403 `privileged`. A session keeps full access. -/
 
 namespace Server.Api
 
@@ -64,6 +70,25 @@ def withTriage (st : State) (rows : Array Row) : IO (Array Row) := do
 def listJson (rows : Array Row) (next : Option String) : Json :=
   Json.mkObj [("items", Json.arr (rows.map listItem)), ("next", match next with | some n => Json.str n | none => Json.null)]
 
+/-! ## Withholding from tokens -/
+
+/-- Whether this request came in on an API token (not a session or the dev bypass). -/
+def byToken (c : Ctx) : Bool := match c.principal with
+  | .token _ _ => true
+  | _ => false
+
+def withheldJson (id : String) : Json := Json.mkObj [("id", Json.str id), ("withheld", Json.bool true)]
+
+/-- For a token, the predicate that leaves withheld mail out of a list (`m` is the messages alias). -/
+def tokenClauses (c : Ctx) : Array String × Array Value :=
+  if byToken c then (#[s!"NOT {AI.withheldSql}"], #[]) else (#[], #[])
+
+/-- For a token and a withheld message: the refusal of its content. -/
+def refuseWithheld (c : Ctx) (id : String) : IO (Option Resp) := do
+  if byToken c && (← AI.isWithheld c.st id) then
+    return some (Resp.json 403 (Json.mkObj [("error", Json.str "privileged"), ("id", Json.str id), ("withheld", Json.bool true)]))
+  return none
+
 /-! ## Lists and search -/
 
 /-- The predicates of a list view. `inbox` hides archived, junk and snoozed-for-later mail. -/
@@ -85,13 +110,14 @@ def msgs (c : Ctx) (req : Req) : IO Resp := do
   let some (cs, args) := filterClauses filter now | return Resp.error 400 "bad filter"
   let folder := (req.param? "folder").getD (if filter == "inbox" then "inbox" else "")
   let (cs, args) := if folder.isEmpty then (cs, args) else (cs.push "m.folder = ?", args.push (.text folder))
-  let page ← Search.runQuery c.st {} (req.natParam "limit" 50) 0 (req.param? "before") (cs, args)
+  let (wc, wa) := tokenClauses c
+  let page ← Search.runQuery c.st {} (req.natParam "limit" 50) 0 (req.param? "before") (cs ++ wc, args ++ wa)
   return Resp.ok (listJson (← withTriage c.st page.rows) page.next)
 
 def search (c : Ctx) (req : Req) : IO Resp := do
   let q := (req.param? "q").getD ""
   let page ← Search.runQuery c.st (Core.Query.parse q) (req.natParam "limit" 50) (req.natParam "offset" 0)
-    (req.param? "before")
+    (req.param? "before") (tokenClauses c)
   return Resp.ok (listJson (← withTriage c.st page.rows) page.next)
 
 /-! ## One message -/
@@ -102,6 +128,7 @@ def messageRow (st : State) (id : String) : IO (Option Row) :=
 def msg (c : Ctx) (_ : Req) : IO Resp := do
   let id := c.param "id"
   let some r ← messageRow c.st id | return Resp.notFound
+  if byToken c && (← AI.isWithheld c.st id) then return Resp.ok (withheldJson id)
   let text := ((← c.st.db.queryOne "SELECT body FROM message_text WHERE message_id = ?" #[id]).map (·.text "body")).getD ""
   let atts ← c.st.db.query "SELECT idx, filename, mime, size, content_id, inline FROM attachments WHERE message_id = ? ORDER BY idx" #[id]
   let attJson := atts.map fun a => Json.mkObj [
@@ -134,19 +161,37 @@ def loadRaw (st : State) (id : String) : IO (Option (Row × ByteArray)) := do
   let some (raw, _) ← st.store.get key | return none
   return some (r, raw)
 
-def htmlCsp : String := "default-src 'none'; img-src data: cid: https:; style-src 'unsafe-inline'"
+/-- The message HTML's policy: a sandbox with no script, no network but inline `data:`/`cid:`
+images (remote images only with `?images=1`, `htmlCspImages`), no forms, no `<base>`. -/
+def htmlCsp : String :=
+  "sandbox; default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"
 
-/-- The HTML part, for a sandboxed iframe. -/
-def msgHtml (c : Ctx) (_ : Req) : IO Resp := do
+/-- `htmlCsp` with remote (`https:`) images, which the reader opted into. -/
+def htmlCspImages : String :=
+  "sandbox; default-src 'none'; img-src data: cid: https:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"
+
+/-- The HTML part, for a sandboxed iframe; `?images=1` lets remote images load. -/
+def msgHtml (c : Ctx) (req : Req) : IO Resp := do
+  if let some r ← refuseWithheld c (c.param "id") then return r
   let some (_, raw) ← loadRaw c.st (c.param "id") | return Resp.notFound
   let some html := (Core.Mime.parse raw).html | return Resp.error 404 "no html part"
+  let csp := if req.param? "images" == some "1" then htmlCspImages else htmlCsp
   return { status := 200, body := html.toUTF8, headers := [
-    ("Content-Type", "text/html; charset=utf-8"), ("Content-Security-Policy", htmlCsp),
+    ("Content-Type", "text/html; charset=utf-8"), ("Content-Security-Policy", csp),
     ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "no-referrer")] }
 
+/-- The `<id>` of a download filename: the id's own characters only. -/
+def idFilename (id : String) : String :=
+  let t := String.ofList (id.toList.filter fun c => c.isAlphanum || c == '-' || c == '_')
+  if t.isEmpty then "message" else String.ofList (t.toList.take 64)
+
+/-- The raw message, as a download that is never rendered. -/
 def msgRaw (c : Ctx) (_ : Req) : IO Resp := do
+  if let some r ← refuseWithheld c (c.param "id") then return r
   let some (_, raw) ← loadRaw c.st (c.param "id") | return Resp.notFound
-  return { status := 200, body := raw, headers := [("Content-Type", "message/rfc822"), ("X-Content-Type-Options", "nosniff")] }
+  return { status := 200, body := raw, headers := [("Content-Type", "message/rfc822"), ("X-Content-Type-Options", "nosniff"),
+    ("Content-Disposition", s!"attachment; filename=\"{idFilename (c.param "id")}.eml\""),
+    ("Content-Security-Policy", "sandbox")] }
 
 /-- A filename safe inside `filename="…"`: printable ASCII without quotes, backslashes, slashes
 or control characters, at most 120 characters; `attachment` when nothing is left. -/
@@ -165,6 +210,7 @@ def safeMime (m : String) : String :=
 
 def msgAttachment (c : Ctx) (_ : Req) : IO Resp := do
   let some idx := (c.param "idx").toNat? | return Resp.notFound
+  if let some r ← refuseWithheld c (c.param "id") then return r
   let some (_, raw) ← loadRaw c.st (c.param "id") | return Resp.notFound
   let some a := (Core.Mime.parse raw).attachments[idx]? | return Resp.notFound
   return { status := 200, body := a.content, headers := [
@@ -173,8 +219,11 @@ def msgAttachment (c : Ctx) (_ : Req) : IO Resp := do
     ("Content-Security-Policy", "sandbox"), ("X-Content-Type-Options", "nosniff")] }
 
 def thread (c : Ctx) (_ : Req) : IO Resp := do
-  let rows ← c.st.db.query "SELECT * FROM messages WHERE thread_id = ? AND deleted = 0 ORDER BY received_at ASC, id ASC" #[c.param "id"]
+  let rows ← c.st.db.query "SELECT m.* FROM messages m WHERE m.thread_id = ? AND m.deleted = 0 ORDER BY m.received_at ASC, m.id ASC" #[c.param "id"]
   if rows.isEmpty then return Resp.notFound
+  -- a withheld thread is withheld whole (`AI.withheldSql`): a token gets no entries
+  let held ← if byToken c then AI.threadWithheld c.st (c.param "id") else pure false
+  if held then return Resp.ok (Json.mkObj [("items", Json.arr #[]), ("next", Json.null), ("withheld", Json.num rows.size)])
   return Resp.ok (listJson rows none)
 
 /-! ## Import, wake, tick -/
