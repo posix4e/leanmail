@@ -2,7 +2,7 @@
 
 Generated 2026-11-02 (UTC) by `scripts/spec.sh` from the test suites. Do not edit by hand.
 
-1504 passing checks: core-test 67, address-test 103, ical-test 666, junk-test 117, server-test 422, worker 112, cli-smoke 17.
+1495 passing checks: core-test 67, address-test 103, ical-test 666, junk-test 117, server-test 422, worker 103, cli-smoke 17.
 
 Each bullet is the name of a check that passed, in the order its suite runs it. To change
 this file, change the tests and run `make spec`; CI fails when it is out of date.
@@ -1409,7 +1409,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 
 ## worker
 
-`worker/test`, run as `npm test` (vitest in the Workers pool); 112 tests.
+`worker/test`, run as `npm test` (vitest in the Workers pool); 103 tests.
 
 ### test/auth.test.ts
 
@@ -1435,6 +1435,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - M9b: passkey login › refuses, without waking a container: unknown, pending and _operator handles, no handle, a bad or expired challenge
 - M9b: the sign-up page › signed out, GET and POST /signup go to the operator; with a cookie, to the account
 - M9b: the sign-up page › the form POST /auth/signup reaches the operator as JSON and answers 303 by the outcome
+- RP_ID › is used only when it is the origin's host or a parent domain of it
 
 ### test/email.test.ts
 
@@ -1451,19 +1452,6 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - loopGuard › flags each store-only signal
 - loopGuard › counts Received hops
 - forward breaker › trips after 300 in an hour and resets after the window
-
-### test/gate.test.ts
-
-- passphrase gate › is off without GATE_PASSPHRASE: a signed-out browser still goes to /signin
-- passphrase gate › answers a bare 401 with a Basic challenge to anyone signed out, even for /signin and /signup
-- passphrase gate › refuses a wrong passphrase
-- passphrase gate › lets the right passphrase through, sets the gate cookie, and strips the Basic header
-- passphrase gate › lets a signed-in session or API token through without the passphrase
-- passphrase gate › keeps a signed-in browser's cached Basic header from reaching the container
-- passphrase gate › leaves /health open
-- passphrase gate › rate-limits passphrase attempts
-- passphrase gate › voids gate cookies when the passphrase changes, and when they expire
-- RP_ID › is used only when it is the origin's host or a parent domain of it
 
 ### test/gmail.test.ts
 

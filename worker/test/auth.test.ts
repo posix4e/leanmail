@@ -1,6 +1,6 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AUTH_RATE_PER_HOUR, PASSKEY_CHALLENGE_TTL_MS, mintPasskeyChallenge, verifyPasskeyChallenge } from "../src/auth";
+import { AUTH_RATE_PER_HOUR, PASSKEY_CHALLENGE_TTL_MS, mintPasskeyChallenge, rpIdFor, verifyPasskeyChallenge } from "../src/auth";
 import { stampHeaders } from "../src/container";
 import type { Env } from "../src/env";
 import { dailyTick, handleFetch } from "../src/index";
@@ -434,5 +434,18 @@ describe("M9b: the sign-up page", () => {
       where.push((await post()).headers.get("location") ?? "");
     }
     expect(where).toEqual(["/signup?error=email", "/signup?error=rate", "/signup", "/signup?error=failed"]);
+  });
+});
+
+describe("RP_ID", () => {
+  it("is used only when it is the origin's host or a parent domain of it", () => {
+    const o = "https://mail.leanmail.io";
+    expect(rpIdFor({ PUBLIC_ORIGIN: o })).toBe("mail.leanmail.io");
+    expect(rpIdFor({ PUBLIC_ORIGIN: o, RP_ID: "leanmail.io" })).toBe("leanmail.io");
+    expect(rpIdFor({ PUBLIC_ORIGIN: o, RP_ID: "LeanMail.io " })).toBe("leanmail.io");
+    expect(rpIdFor({ PUBLIC_ORIGIN: o, RP_ID: "mail.leanmail.io" })).toBe("mail.leanmail.io");
+    expect(rpIdFor({ PUBLIC_ORIGIN: o, RP_ID: "io" })).toBe("mail.leanmail.io");
+    expect(rpIdFor({ PUBLIC_ORIGIN: o, RP_ID: "evil.example" })).toBe("mail.leanmail.io");
+    expect(rpIdFor({ PUBLIC_ORIGIN: o, RP_ID: "anleanmail.io" })).toBe("mail.leanmail.io");
   });
 });

@@ -99,8 +99,6 @@
 	//             CF_API_TOKEN, CF_ACCOUNT_ID (the routing page applies Email Routing changes; only the
 	//             `_operator` container receives them, and applies for accounts through /internal/routing/*)
 	//             GOOGLE_PUBSUB_TOPIC (Gmail push)
-	//             GATE_PASSPHRASE (a signed-out request must give it, as HTTP Basic, or gets a 401:
-	//             strangers see no sign-in page; src/gate.ts)
 	//
 	// No `assets` binding: the container serves /static/* (lean/Server/Static.lean) from web/, which
 	// the image copies to /opt/leanmail/web, and the Worker sends signed-out /static/* to the

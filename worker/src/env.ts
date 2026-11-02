@@ -8,6 +8,4 @@ export interface Env extends ContainerEnv {
   EMAIL: SendEmail;
   /** Local development only (worker/.dev.vars): the account unauthenticated localhost requests reach. */
   DEV_ACCOUNT?: string;
-  /** Optional secret: a signed-out request must show it (HTTP Basic) or gets a 401 (src/gate.ts). */
-  GATE_PASSPHRASE?: string;
 }

@@ -93,7 +93,6 @@ Optional ones, each independent:
 | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | An OpenAI-compatible chat-completions endpoint. Off unless all three are set. |
 | `CF_API_TOKEN`, `CF_ACCOUNT_ID` | Lets Settings → Routing check and apply your Email Routing changes itself. The token needs Zone Read, Email Routing Edit and Email Sending Edit on your zones. Without them the page shows the plan and you apply it with the commands in step 5. (As of this writing the container does not yet receive these two, so use step 5's commands.) |
 | `GOOGLE_PUBSUB_TOPIC` | `projects/<project>/topics/<topic>`, the default Pub/Sub topic for Gmail push (each account can set its own). |
-| `GATE_PASSPHRASE` | Keeps the install private. Anyone not signed in gets a bare `401` and the browser's password prompt (any user name, this passphrase), so strangers never see the sign-in or sign-up page. The right passphrase sets a 90-day cookie; changing it signs every browser out of the gate. Signed-in sessions, API tokens (the CLI, the app's token sign-in), incoming mail, `/health` and the Gmail hook skip it. Wrong guesses count against the sign-in rate limit. |
 
 `SESSION_SECRET` and `INTERNAL_SECRET` never reach a container: each account's container gets
 `base64url(HMAC-SHA256(secret, account id))`, so one container can only speak for itself.
