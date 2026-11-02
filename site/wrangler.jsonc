@@ -1,0 +1,18 @@
+{
+	// leanmail.io, the project's page: static files only, no code. The mail install itself is the
+	// `leanmail` Worker on mail.leanmail.io (worker/). Deploy from this folder: `npx wrangler deploy`.
+	// Self-hosters do not need this.
+	"name": "leanmail-site",
+	"compatibility_date": "2026-10-01",
+	"assets": {
+		"directory": "./public",
+		"html_handling": "auto-trailing-slash",
+		"not_found_handling": "404-page"
+	},
+	"routes": [
+		{
+			"pattern": "leanmail.io",
+			"custom_domain": true
+		}
+	]
+}

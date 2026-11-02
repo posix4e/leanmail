@@ -63,10 +63,11 @@
 			"0 4 * * *"
 		]
 	},
-	// The production install at https://leanmail.io, served on its custom domain.
+	// The production install at https://mail.leanmail.io, served on its custom domain. leanmail.io
+	// itself is the project's page, a separate Worker (site/).
 	"routes": [
 		{
-			"pattern": "leanmail.io",
+			"pattern": "mail.leanmail.io",
 			"custom_domain": true
 		}
 	],
@@ -78,8 +79,11 @@
 	//   SIGNUP_MODE             approve (an admin approves each sign-up), open, or closed
 	//   RETENTION_DAYS_DEFAULT  days until newly stored mail expires, for accounts that have not set their own
 	//   ADMIN_EMAILS            comma-separated; a sign-up from one of these is approved at once, as an admin
+	//   RP_ID                   optional: the passkey relying party, PUBLIC_ORIGIN's host or a parent domain
+	//                           of it, so passkeys outlive a move between subdomains (default: the host)
 	"vars": {
-		"PUBLIC_ORIGIN": "https://leanmail.io",
+		"PUBLIC_ORIGIN": "https://mail.leanmail.io",
+		"RP_ID": "leanmail.io",
 		"SIGNUP_MODE": "approve",
 		"RETENTION_DAYS_DEFAULT": "90",
 		"ADMIN_EMAILS": "info@fralex.art"
@@ -95,6 +99,8 @@
 	//             CF_API_TOKEN, CF_ACCOUNT_ID (the routing page applies Email Routing changes; only the
 	//             `_operator` container receives them, and applies for accounts through /internal/routing/*)
 	//             GOOGLE_PUBSUB_TOPIC (Gmail push)
+	//             GATE_PASSPHRASE (a signed-out request must give it, as HTTP Basic, or gets a 401:
+	//             strangers see no sign-in page; src/gate.ts)
 	//
 	// No `assets` binding: the container serves /static/* (lean/Server/Static.lean) from web/, which
 	// the image copies to /opt/leanmail/web, and the Worker sends signed-out /static/* to the

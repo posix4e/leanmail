@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeanMail</title>
+<meta name="description" content="An open-source mail client and archive you run on your own Cloudflare account, written in Lean 4.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232357d6'/%3E%3Cpath d='M7 10h18v12H7z' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='M7 10l9 7 9-7' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #fbfbfa; --fg: #1d1d1f; --muted: #6b6b70; --line: #e4e4e2; --card: #ffffff;
+    --accent: #2357d6; --accent-fg: #ffffff; --code: #f1f1ef;
+    --gutter: 16px; --max: 760px; --radius: 8px;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161618; --fg: #ececee; --muted: #9a9aa2; --line: #2c2c31; --card: #1e1e21;
+      --accent: #7fa4ff; --accent-fg: #0e1220; --code: #232327;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  a { color: var(--accent); }
+  main, header, footer { max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter); }
+  header { padding-top: 56px; padding-bottom: 32px; }
+  .mark { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; }
+  .mark svg { width: 28px; height: 28px; }
+  h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); line-height: 1.15; margin: 28px 0 14px; letter-spacing: -0.01em; }
+  .lede { font-size: 1.15rem; color: var(--muted); margin: 0 0 26px; max-width: 36em; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn {
+    display: inline-block; padding: 10px 16px; border-radius: var(--radius); font-weight: 600;
+    text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--card);
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .btn:hover { filter: brightness(0.97); }
+  section { border-top: 1px solid var(--line); padding: 34px 0; }
+  h2 { font-size: 1.2rem; margin: 0 0 14px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .card h3 { font-size: 1rem; margin: 0 0 6px; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+  pre {
+    background: var(--code); border-radius: var(--radius); padding: 14px 16px; overflow-x: auto;
+    font: 0.86rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0;
+  }
+  ul { padding-left: 1.2em; margin: 0; }
+  li { margin: 6px 0; }
+  footer { border-top: 1px solid var(--line); padding-top: 22px; padding-bottom: 48px; color: var(--muted); font-size: 0.92rem; }
+</style>
+</head>
+<body>
+<header>
+  <span class="mark">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#2357d6"/><path d="M7 10h18v12H7z" fill="none" stroke="#fff" stroke-width="2"/><path d="M7 10l9 7 9-7" fill="none" stroke="#fff" stroke-width="2"/></svg>
+    LeanMail
+  </span>
+  <h1>Your mail, on your own Cloudflare account.</h1>
+  <p class="lede">An open-source mail client and archive written in Lean 4. Mail arrives through Cloudflare
+    Email Routing or from Gmail, and each account gets its own container and its own SQLite database.</p>
+  <div class="actions">
+    <a class="btn primary" href="https://github.com/posix4e/leanmail/blob/main/docs/SELF-HOSTING.md">Run your own</a>
+    <a class="btn" href="https://github.com/posix4e/leanmail">Source on GitHub</a>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>What it does</h2>
+    <div class="grid">
+      <div class="card"><h3>Receive</h3><p>Email Routing hands mail to a Worker, which spools it to R2 and wakes your container to parse, thread and index it.</p></div>
+      <div class="card"><h3>Read and search</h3><p>A server-rendered web app with threads, full-text search, snooze, expiry, and junk and phishing rules.</p></div>
+      <div class="card"><h3>Write</h3><p>Compose, reply and forward with drafts and a Sent folder, sent through Cloudflare Email Sending.</p></div>
+      <div class="card"><h3>Gmail</h3><p>Your own OAuth client: backfill, push, archive and send-as, kept in step with LeanMail.</p></div>
+      <div class="card"><h3>Sign in</h3><p>Passkeys, a magic link or a six-digit code. Scoped API tokens for the CLI and the apps.</p></div>
+      <div class="card"><h3>AI, if you want it</h3><p>Optional triage, summaries and reply suggestions over any OpenAI-compatible endpoint. Privileged mail is never sent.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Everywhere you read mail</h2>
+    <ul>
+      <li><strong>Web:</strong> server-rendered pages, phone first, light and dark.</li>
+      <li><strong>Command line:</strong> <code>leanmail</code> searches, reads, imports .eml and mbox, sends, and runs as an MCP server for AI tools.</li>
+      <li><strong>iPhone, iPad and Mac:</strong> native apps written in Lean with <a href="https://github.com/LeanNative/leannative">LeanNative</a>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>How it fits together</h2>
+<pre>mail ─► Email Routing ─► Worker ─► R2 spool ─► your account's container
+browser / CLI / app ─► Worker (cookie or token) ─► your container ─► Lean server
+Lean server ─► SQLite (FTS5), replicated to R2 by Litestream</pre>
+    <p>One container per account, a thin fixed Worker, and no end-to-end encryption: the server reads your
+      mail so it can index and render it. Read the <a href="https://github.com/posix4e/leanmail/blob/main/docs/ARCHITECTURE.md">architecture</a>
+      and <a href="https://github.com/posix4e/leanmail/blob/main/SECURITY.md">security notes</a> before you trust it with yours.</p>
+  </section>
+
+  <section>
+    <h2>Run your own</h2>
+    <p>You need a Cloudflare account with Workers Paid (for Containers), a domain on Cloudflare, and about an hour.
+      The <a href="https://github.com/posix4e/leanmail/blob/main/docs/SELF-HOSTING.md">self-hosting guide</a> walks through it.</p>
+  </section>
+</main>
+
+<footer>
+  LeanMail is open source under the Apache 2.0 license. <a href="https://github.com/posix4e/leanmail">github.com/posix4e/leanmail</a>
+</footer>
+</body>
+</html>

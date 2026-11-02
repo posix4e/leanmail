@@ -6,7 +6,7 @@ Cloudflare Container, and is read in a server-rendered web app, a command-line c
 as an MCP server for AI tools, and native iPhone, iPad and Mac apps written in Lean with
 [LeanNative](https://github.com/LeanNative/leannative).
 
-A hosted instance runs at **leanmail.io**. It is free; every sign-up is approved by hand.
+The project's page is [leanmail.io](https://leanmail.io). Its hosted instance, mail.leanmail.io, is private: it asks for a passphrase before it shows a sign-in page.
 
 ## Shape
 

@@ -63,6 +63,7 @@ Edit `vars` in `worker/wrangler.jsonc`:
 | `SIGNUP_MODE` | `approve` (every sign-up waits for an admin), `open` (approved at once) or `closed` (no sign-ups; `ADMIN_EMAILS` included). |
 | `RETENTION_DAYS_DEFAULT` | Days until newly stored mail expires, for accounts that have not chosen their own in Settings. `90` by default. |
 | `ADMIN_EMAILS` | Add this key: comma-separated addresses. A sign-up from one of them is approved at once, as an admin. |
+| `RP_ID` | Optional. The passkeys' relying party: the host of `PUBLIC_ORIGIN` (the default) or a parent domain of it, e.g. `example.com` for `https://mail.example.com`, so passkeys keep working if you move between subdomains. Anything else is ignored. |
 
 To answer on your own host, add a custom domain to the same file (or attach it later in the
 dashboard under **Workers & Pages → leanmail → Settings → Domains & Routes**):
@@ -92,6 +93,7 @@ Optional ones, each independent:
 | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | An OpenAI-compatible chat-completions endpoint. Off unless all three are set. |
 | `CF_API_TOKEN`, `CF_ACCOUNT_ID` | Lets Settings → Routing check and apply your Email Routing changes itself. The token needs Zone Read, Email Routing Edit and Email Sending Edit on your zones. Without them the page shows the plan and you apply it with the commands in step 5. (As of this writing the container does not yet receive these two, so use step 5's commands.) |
 | `GOOGLE_PUBSUB_TOPIC` | `projects/<project>/topics/<topic>`, the default Pub/Sub topic for Gmail push (each account can set its own). |
+| `GATE_PASSPHRASE` | Keeps the install private. Anyone not signed in gets a bare `401` and the browser's password prompt (any user name, this passphrase), so strangers never see the sign-in or sign-up page. The right passphrase sets a 90-day cookie; changing it signs every browser out of the gate. Signed-in sessions, API tokens (the CLI, the app's token sign-in), incoming mail, `/health` and the Gmail hook skip it. Wrong guesses count against the sign-in rate limit. |
 
 `SESSION_SECRET` and `INTERNAL_SECRET` never reach a container: each account's container gets
 `base64url(HMAC-SHA256(secret, account id))`, so one container can only speak for itself.
@@ -185,8 +187,8 @@ the catch-all and rule changes above for each domain it manages.
 2. **Sign in.** Follow the link, or open `https://mail.example.com/signin`, enter your address, and
    use the link or the six-digit code it mails you (valid 15 minutes).
    Once in, **Settings → Passkeys → Add a passkey** lets you sign in with Touch ID, Face ID, Windows
-   Hello or a security key next time. The passkey's relying party is the host of `PUBLIC_ORIGIN`,
-   so a passkey made on one origin does not work on another, and an IP address (the local default
+   Hello or a security key next time. The passkey's relying party is the host of `PUBLIC_ORIGIN`
+   (or `RP_ID`), so a passkey made on one origin does not work on another, and an IP address (the local default
    `http://127.0.0.1:8787`) cannot hold one: use `http://localhost:8787` to try passkeys locally.
 3. **Give yourself your domain.** **Admin → Accounts**: put `example.com` in your account's
    domains and save. The Worker accepts routes only for domains an admin granted to that account.

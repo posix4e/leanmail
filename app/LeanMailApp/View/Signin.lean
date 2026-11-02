@@ -4,8 +4,8 @@ namespace LeanMailApp.View
 open ElmLean
 
 def signin (m : Model) : Html Msg :=
-  let server := .section "Server" "Your LeanMail server: leanmail.io, or your own."
-    [.identified "origin" (.input .plain "Server" "https://leanmail.io" m.originInput Msg.originInput none)]
+  let server := .section "Server" "Your LeanMail server: mail.leanmail.io, or your own."
+    [.identified "origin" (.input .plain "Server" "https://mail.leanmail.io" m.originInput Msg.originInput none)]
   let byCode :=
     if m.codeSent then
       [ .section "Code" s!"Sent to {trim m.email}. It works once and expires in 15 minutes."

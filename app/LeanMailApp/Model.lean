@@ -100,7 +100,7 @@ def filterName (i : Nat) : String := ((filters[i]?).map (·.2)).getD "inbox"
 
 def filterLabel (i : Nat) : String := ((filters[i]?).map (·.1)).getD "Inbox"
 
-def defaultOrigin : String := "https://leanmail.io"
+def defaultOrigin : String := "https://mail.leanmail.io"
 
 structure Model where
   /-- the boot command has answered (debug flag, saved session) -/

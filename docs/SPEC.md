@@ -1,8 +1,8 @@
 # LeanMail specification
 
-Generated 2026-11-01 (UTC) by `scripts/spec.sh` from the test suites. Do not edit by hand.
+Generated 2026-11-02 (UTC) by `scripts/spec.sh` from the test suites. Do not edit by hand.
 
-1493 passing checks: core-test 67, address-test 103, ical-test 666, junk-test 117, server-test 421, worker 102, cli-smoke 17.
+1504 passing checks: core-test 67, address-test 103, ical-test 666, junk-test 117, server-test 422, worker 112, cli-smoke 17.
 
 Each bullet is the name of a check that passed, in the order its suite runs it. To change
 this file, change the tests and run `make spec`; CI fails when it is out of date.
@@ -982,7 +982,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 
 ## server-test
 
-`lean/test`, run as `lake build server-test && ./.lake/build/bin/server-test`; 421 checks.
+`lean/test`, run as `lake build server-test && ./.lake/build/bin/server-test`; 422 checks.
 
 - sha256 of 'abc' matches the FIPS vector
 - hmac-sha256 matches RFC 4231 test case 2
@@ -1357,6 +1357,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - m9b: an assertion's authData (no attested credential) parses with its count
 - m9b: a COSE key must be EC2, ES256 and P-256 with 32-byte coordinates
 - m9b: the sign count must grow unless it stays 0
+- m9b: the rp id is RP_ID when it is the origin's host or a parent domain of it, else the host
 - m9b: registration options carry a stored 32-byte challenge, the rp and user, ES256, no attestation, a resident key
 - m9b: registration refuses another origin and a get assertion's client data
 - m9b: a none-attestation registration is stored with its COSE key, name, transports and backup flag
@@ -1408,7 +1409,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 
 ## worker
 
-`worker/test`, run as `npm test` (vitest in the Workers pool); 102 tests.
+`worker/test`, run as `npm test` (vitest in the Workers pool); 112 tests.
 
 ### test/auth.test.ts
 
@@ -1450,6 +1451,19 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - loopGuard › flags each store-only signal
 - loopGuard › counts Received hops
 - forward breaker › trips after 300 in an hour and resets after the window
+
+### test/gate.test.ts
+
+- passphrase gate › is off without GATE_PASSPHRASE: a signed-out browser still goes to /signin
+- passphrase gate › answers a bare 401 with a Basic challenge to anyone signed out, even for /signin and /signup
+- passphrase gate › refuses a wrong passphrase
+- passphrase gate › lets the right passphrase through, sets the gate cookie, and strips the Basic header
+- passphrase gate › lets a signed-in session or API token through without the passphrase
+- passphrase gate › keeps a signed-in browser's cached Basic header from reaching the container
+- passphrase gate › leaves /health open
+- passphrase gate › rate-limits passphrase attempts
+- passphrase gate › voids gate cookies when the passphrase changes, and when they expire
+- RP_ID › is used only when it is the origin's host or a parent domain of it
 
 ### test/gmail.test.ts
 
