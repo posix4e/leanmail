@@ -9,9 +9,13 @@ def manifest : Manifest where
   name := "LeanMailApp"
   displayName := "LeanMail"
   bundleId := "io.leanmail.app"
+  team := some "2858MX5336"
   version := .settings "0.1.0" "1"
   deploymentTarget := "26.0"
   mac := .catalyst
+  -- App Store Connect refuses an iPad build without all four (iPad multitasking)
+  orientations := some ([.portrait, .landscapeLeft, .landscapeRight],
+                         [.portrait, .portraitUpsideDown, .landscapeLeft, .landscapeRight])
   uses := ["http.request", "keychain.*", "build", "paths"]
   icon := some "Assets.xcassets"
   uiTests := some {}
