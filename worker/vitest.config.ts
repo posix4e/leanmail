@@ -12,6 +12,10 @@ export default defineConfig(async () => {
             TEST_MIGRATIONS: migrations,
             INTERNAL_SECRET: "test-internal-secret",
             SESSION_SECRET: "test-session-secret",
+            // the local-development settings the tests expect, so they never depend on worker/.dev.vars
+            DEV_ACCOUNT: "dev",
+            MAIL_FROM: "no-reply@localhost.test",
+            PUBLIC_ORIGIN: "http://127.0.0.1:8787",
           },
         },
       }),
