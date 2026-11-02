@@ -259,10 +259,20 @@ export async function passkeyVoucher(master: string, acct: string, token: string
   return b64uEncode(await hmacRaw(await deriveSecret(master, acct), `passkey:${token}`));
 }
 
+/**
+ * The passkey relying party, as the container's `Server.Auth.Passkey.rpId` has it: RP_ID when it
+ * is PUBLIC_ORIGIN's host or a parent domain of it, else that host.
+ */
+export function rpIdFor(env: { PUBLIC_ORIGIN: string; RP_ID?: string }): string {
+  const host = new URL(env.PUBLIC_ORIGIN).hostname;
+  const r = (env.RP_ID ?? "").trim().toLowerCase();
+  return r.includes(".") && (host === r || host.endsWith(`.${r}`)) ? r : host;
+}
+
 function passkeyChallenge(env: Env): Promise<Response> | Response {
   if (!env.SESSION_SECRET) return json(503, { error: "not configured" });
   return mintPasskeyChallenge(env.SESSION_SECRET).then((challenge) =>
-    json(200, { challenge, rpId: new URL(env.PUBLIC_ORIGIN).hostname, userVerification: "preferred", timeout: PASSKEY_CHALLENGE_TTL_MS }, { "cache-control": "no-store" }),
+    json(200, { challenge, rpId: rpIdFor(env), userVerification: "preferred", timeout: PASSKEY_CHALLENGE_TTL_MS }, { "cache-control": "no-store" }),
   );
 }
 

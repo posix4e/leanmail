@@ -2627,6 +2627,11 @@ def m9bPasskeys (t : IO.Ref Tally) : IO Unit := do
   check t "m9b: the sign count must grow unless it stays 0" <|
     Auth.Passkey.countOk 0 0 && Auth.Passkey.countOk 0 1 && Auth.Passkey.countOk 5 6 &&
       !Auth.Passkey.countOk 5 5 && !Auth.Passkey.countOk 5 3 && !Auth.Passkey.countOk 5 0
+  let rpOf (o r : String) := Auth.Passkey.rpId { publicOrigin := o, rpIdSetting := r }
+  check t "m9b: the rp id is RP_ID when it is the origin's host or a parent domain of it, else the host" <|
+    rpOf "https://mail.leanmail.io" "" == "mail.leanmail.io" && rpOf "https://mail.leanmail.io" "leanmail.io" == "leanmail.io" &&
+      rpOf "https://mail.leanmail.io" "mail.leanmail.io" == "mail.leanmail.io" && rpOf "https://mail.leanmail.io" "io" == "mail.leanmail.io" &&
+      rpOf "https://mail.leanmail.io" "evil.example" == "mail.leanmail.io" && rpOf "https://mail.leanmail.io" "anleanmail.io" == "mail.leanmail.io"
 
   -- an account container behind the Worker: register, then log in
   let cfg : Config := { accountId := "acct1", sessionSecret := "k1", publicOrigin := "https://mail.test",

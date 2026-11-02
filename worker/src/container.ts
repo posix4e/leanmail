@@ -24,6 +24,8 @@ export interface ContainerEnv {
   ADMIN_EMAILS?: string;
   /** The From of sign-in mail; default `no-reply@<host of PUBLIC_ORIGIN>` on both sides. */
   MAIL_FROM?: string;
+  /** The passkey relying party: a parent domain of PUBLIC_ORIGIN's host (src/auth.ts `rpIdFor`). */
+  RP_ID?: string;
   /** `projects/<p>/topics/<t>`: the Pub/Sub topic Gmail's watch publishes to (optional). */
   GOOGLE_PUBSUB_TOPIC?: string;
   /** The container's log level (`debug`, `info`, `warn`, `error`); passed through when set. */
@@ -186,7 +188,7 @@ export class MailContainer extends Container<ContainerEnv> {
     };
     for (const k of ["MAIL_FROM", "R2_BUCKET", "R2_ENDPOINT", "R2_ACCESS_KEY_ID",
       "R2_SECRET_ACCESS_KEY", "AI_BASE_URL", "AI_API_KEY", "AI_MODEL", "ADMIN_EMAILS",
-      "GOOGLE_PUBSUB_TOPIC", "LOG_LEVEL"] as const) {
+      "GOOGLE_PUBSUB_TOPIC", "LOG_LEVEL", "RP_ID"] as const) {
       const v = e[k];
       if (v) vars[k] = v;
     }

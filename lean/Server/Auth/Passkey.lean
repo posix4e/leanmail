@@ -46,8 +46,12 @@ def challengeTtlMs : Nat := 5 * 60 * 1000
 def maxCredentialId : Nat := 1023
 def headerName : String := "x-passkey-challenge-ok"
 
-/-- The relying party id: the host of `PUBLIC_ORIGIN`. -/
-def rpId (c : Config) : String := Config.originHost c.publicOrigin
+/-- The relying party id: `RP_ID` when it is the host of `PUBLIC_ORIGIN` or a parent domain of it
+(what WebAuthn lets a page claim), else that host. -/
+def rpId (c : Config) : String :=
+  let host := Config.originHost c.publicOrigin
+  let r := c.rpIdSetting
+  if !r.isEmpty && r.contains '.' && (host == r || host.endsWith ("." ++ r)) then r else host
 
 /-- Strict base64url: only the URL alphabet, no padding. -/
 def b64u? (s : String) : Option ByteArray :=

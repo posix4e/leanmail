@@ -25,6 +25,10 @@ structure Config where
   r2Region : String := "auto"
   /-- The address sign-in mail comes from (`MAIL_FROM`); default `no-reply@<host of PUBLIC_ORIGIN>`. -/
   mailFrom : String := "no-reply@127.0.0.1"
+  /-- `RP_ID`: the passkey relying party, when it is a parent domain of `PUBLIC_ORIGIN`'s host
+  (`leanmail.io` for `https://mail.leanmail.io`), so passkeys survive a move between its
+  subdomains. Empty, or not that host or a parent of it: the host itself (`Server.Auth.Passkey.rpId`). -/
+  rpIdSetting : String := ""
   /-- `DEV_AUTH_BYPASS=1`: any request carrying `x-account-id` is an admin session. Honoured only
   when `PUBLIC_ORIGIN` is a localhost origin (see `devBypassOn`). -/
   devBypass : Bool := false
@@ -89,6 +93,7 @@ def fromEnv : IO Config := do
     r2AccessKeyId := ← env "R2_ACCESS_KEY_ID" ""
     r2SecretAccessKey := ← env "R2_SECRET_ACCESS_KEY" ""
     r2Region := ← env "R2_REGION" "auto"
+    rpIdSetting := (← env "RP_ID" "").trimAscii.toString.toLower
     mailFrom := ← env "MAIL_FROM" ("no-reply@" ++ originHost (← env "PUBLIC_ORIGIN" "http://127.0.0.1:8787"))
     -- refused (false) unless the public origin is a localhost one; `Main` logs either way
     devBypass := (← env "DEV_AUTH_BYPASS" "") == "1" && isLocalOriginStr (← env "PUBLIC_ORIGIN" "http://127.0.0.1:8787")
