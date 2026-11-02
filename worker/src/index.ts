@@ -4,6 +4,7 @@ import type { Env } from "./env";
 import { handleAuth, isNavigation, proxyTo, pruneAuthRate, toSignin } from "./auth";
 import { OPERATOR, handleInternal, localDev } from "./internal";
 import { handleGmailHook, handleOAuthCallback } from "./gmail";
+import { checkGate, withCookie } from "./gate";
 import { errText, log } from "./log";
 import { canonicalPath, firstSegment } from "./paths";
 import { listActiveAccounts } from "./routes";
@@ -79,7 +80,7 @@ function isPublicPage(method: string, path: string): boolean {
  * and a client never reaches a container's. (`/internal/../internal/x` is `/internal/x` once the
  * URL is parsed, so it is that handler's, behind a container secret.) Every later check, and the
  * container, sees the canonical path. Order: /health; /internal/* (containers); the Gmail hook and OAuth
- * callback (src/gmail.ts); the sign-in routes and
+ * callback (src/gmail.ts); the passphrase gate, when GATE_PASSPHRASE is set (src/gate.ts); the sign-in routes and
  * /admin/* (src/auth.ts); a MAC-verified cookie or bearer → that account; DEV_ACCOUNT on
  * localhost; signed-out sign-in and sign-up pages and static files → the operator; a signed-out browser
  * navigation → 302 /signin; anything else 401.
@@ -102,6 +103,12 @@ export async function handleFetch(request: Request, env: Env, ctx: ExecutionCont
   // Gmail: Pub/Sub push (signed URL) and Google's OAuth redirect (MAC'd state), src/gmail.ts
   if (url.pathname.startsWith("/hooks/gmail/")) return handleGmailHook(request, env, ctx);
   if (url.pathname === "/oauth/google/callback") return handleOAuthCallback(request, env);
+  const gate = await checkGate(request, env);
+  if (!gate.pass) return gate.response;
+  return withCookie(await route(gate.request, url, env, ctx), gate.setCookie);
+}
+
+async function route(request: Request, url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
   const auth = await handleAuth(request, env, ctx);
   if (auth) return auth;
   const accountId = await accountFor(request, env);
