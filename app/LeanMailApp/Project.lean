@@ -10,7 +10,7 @@ def manifest : Manifest where
   displayName := "LeanMail"
   bundleId := "io.leanmail.app"
   team := some "2858MX5336"
-  version := .settings "0.1.0" "1"
+  version := .settings "0.1.0" "2"
   deploymentTarget := "26.0"
   mac := .catalyst
   -- App Store Connect refuses an iPad build without all four (iPad multitasking)
@@ -19,7 +19,11 @@ def manifest : Manifest where
   uses := ["http.request", "keychain.*", "build", "paths"]
   icon := some "Assets.xcassets"
   uiTests := some {}
+  -- The shared LeanNative shell links CoreBluetooth and LocalAuthentication for every app, so App Store
+  -- Connect asks for their purpose strings although LeanMail calls neither.
   info := [("ITSAppUsesNonExemptEncryption", toJson false),
+           ("NSBluetoothAlwaysUsageDescription", toJson "LeanMail does not use Bluetooth."),
+           ("NSFaceIDUsageDescription", toJson "LeanMail does not use Face ID; passkeys use the system's own prompt."),
            -- plain http only to local addresses (a development server); everything else is HTTPS
            ("NSAppTransportSecurity", Json.mkObj [("NSAllowsLocalNetworking", Json.bool true)])]
   settings := [("TARGETED_DEVICE_FAMILY", "1,2")]
