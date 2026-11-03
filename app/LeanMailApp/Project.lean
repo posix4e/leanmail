@@ -10,7 +10,7 @@ def manifest : Manifest where
   displayName := "LeanMail"
   bundleId := "io.leanmail.app"
   team := some "2858MX5336"
-  version := .settings "0.1.0" "2"
+  version := .settings "0.1.0" "3"
   deploymentTarget := "26.0"
   mac := .catalyst
   -- App Store Connect refuses an iPad build without all four (iPad multitasking)
