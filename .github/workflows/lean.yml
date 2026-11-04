@@ -8,6 +8,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Lean's bundled clang does not search the distro's multiarch directory, so `-lcurl` needs it named
+    # (server/Dockerfile sets the same).
+    env:
+      LIBRARY_PATH: /usr/lib/x86_64-linux-gnu
     steps:
       - uses: actions/checkout@v4
       - name: Install system libraries

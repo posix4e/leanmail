@@ -1,7 +1,7 @@
 import LeanMailApp.View.Common
 
 namespace LeanMailApp.View
-open ElmLean
+open LeanNative
 
 def signin (m : Model) : Html Msg :=
   let server := .section "Server" "Your LeanMail server: mail.leanmail.io, or your own."

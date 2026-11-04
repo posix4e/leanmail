@@ -3,8 +3,8 @@
 LEAN_DIR := lean
 WORKER_DIR := worker
 APP_DIR := app
-# LeanNative's scripts, from the app's pinned elmlean package
-ELMLEAN_CI := $(APP_DIR)/.lake/packages/elmlean/framework/native/ci
+# LeanNative's scripts, from the app's pinned leannative package
+LEANNATIVE_CI := $(APP_DIR)/.lake/packages/leannative/framework/native/ci
 APP_ENV := APP_DIR=$(APP_DIR) APP_ROOT=LeanMailApp SCHEME=LeanMailApp
 
 .PHONY: build test core-test address-test ical-test junk-test server-test spec spec-check accept server cli cli-smoke worker-install worker-dev worker-typecheck toolchain-cache docker dev clean app app-ios app-catalyst app-ui-tests
@@ -62,13 +62,13 @@ app:              ## the native app's Lean (Core included), its proof gate and i
 	cd $(APP_DIR) && lake build && lake build leanmail-app-cli && ./.lake/build/bin/leanmail-app-cli selftest
 
 app-ios: app      ## the app for the iOS simulator (Debug)
-	$(APP_ENV) $(ELMLEAN_CI)/build-ios Debug iossim
+	$(APP_ENV) $(LEANNATIVE_CI)/build-ios Debug iossim
 
 app-catalyst: app ## the Mac Catalyst app (Debug); needs LEAN_X86_64_PREFIX (framework/native/scripts/fetch_lean_x86_64.sh)
-	$(APP_ENV) $(ELMLEAN_CI)/build-ios Debug maccatalyst
+	$(APP_ENV) $(LEANNATIVE_CI)/build-ios Debug maccatalyst
 
 app-ui-tests: app ## the UI tests on a throwaway simulator against a bare dev server with the fixture mail
-	UI_BEFORE="$(CURDIR)/$(APP_DIR)/ios/ui-before" UI_AFTER="$(CURDIR)/$(APP_DIR)/ios/ui-after" $(APP_ENV) $(ELMLEAN_CI)/ui-tests
+	UI_BEFORE="$(CURDIR)/$(APP_DIR)/ios/ui-before" UI_AFTER="$(CURDIR)/$(APP_DIR)/ios/ui-after" $(APP_ENV) $(LEANNATIVE_CI)/ui-tests
 
 worker-install:
 	cd $(WORKER_DIR) && npm install

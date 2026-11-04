@@ -1,4 +1,4 @@
-import ElmLean.Proofs
+import LeanNative.Proofs
 import LeanMailApp.App
 
 /-! # What LeanMail proves about its commands
@@ -12,7 +12,7 @@ Both are lifted to every step of every run, any interleaving of user events and 
 the framework's `CmdSpec.trace_origin` (`run_signedOut`, `run_busy`). -/
 
 namespace LeanMailApp
-open ElmLean
+open LeanNative
 
 theorem guard_signedOut (m : Model) (cs : List Cmd) (h : m.session = none) :
     ∀ c ∈ guard m cs, c.isApi = false := by

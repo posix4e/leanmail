@@ -1,4 +1,4 @@
-import ElmLean.Gate
+import LeanNative.Gate
 import LeanMailApp.Proofs
 
 /-! LeanMail's proof gate (`lake build` builds it; `framework/scripts/check-axioms.sh` counts its lines). -/

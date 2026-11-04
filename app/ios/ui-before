@@ -4,7 +4,7 @@
 # The tests read LEANMAIL_TEST_ORIGIN (and LEANMAIL_SCREENSHOTS) from <UI_OUT>/test-env; ui-after stops it.
 #
 #   UI_BEFORE="$PWD/app/ios/ui-before" UI_AFTER="$PWD/app/ios/ui-after" \
-#     APP_DIR=app APP_ROOT=LeanMailApp SCHEME=LeanMailApp app/.lake/packages/elmlean/framework/native/ci/ui-tests
+#     APP_DIR=app APP_ROOT=LeanMailApp SCHEME=LeanMailApp app/.lake/packages/leannative/framework/native/ci/ui-tests
 set -euo pipefail
 OUT="${1:?the ui-tests evidence directory}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

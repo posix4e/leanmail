@@ -1,7 +1,7 @@
 import LeanMailApp.View.Common
 
 namespace LeanMailApp.View
-open ElmLean
+open LeanNative
 
 def inbox (m : Model) : Html Msg :=
   let title := if m.query.isEmpty then filterLabel m.filter else "Search"

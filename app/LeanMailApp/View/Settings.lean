@@ -1,7 +1,7 @@
 import LeanMailApp.View.Common
 
 namespace LeanMailApp.View
-open ElmLean
+open LeanNative
 
 def settings (m : Model) : Html Msg :=
   let s := m.session.getD { origin := "", cred := .dev }

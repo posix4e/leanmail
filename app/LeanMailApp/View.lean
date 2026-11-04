@@ -5,7 +5,7 @@ import LeanMailApp.View.Compose
 import LeanMailApp.View.Settings
 
 namespace LeanMailApp
-open ElmLean
+open LeanNative
 
 def view (m : Model) : Html Msg :=
   if !m.booted then .screen "LeanMail" none [.progress "Opening…"]

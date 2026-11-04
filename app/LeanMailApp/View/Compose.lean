@@ -1,7 +1,7 @@
 import LeanMailApp.View.Common
 
 namespace LeanMailApp.View
-open ElmLean
+open LeanNative
 
 def compose (m : Model) (d : Draft) : Html Msg :=
   .sheet (if d.replyOf.isSome then "Reply" else "New message") (some .cancelCompose)

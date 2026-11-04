@@ -1,7 +1,7 @@
 import LeanMailApp.View.Common
 
 namespace LeanMailApp.View
-open ElmLean
+open LeanNative
 
 def fileName (path : String) : String := ((path.splitOn "/").getLast?).getD path
 

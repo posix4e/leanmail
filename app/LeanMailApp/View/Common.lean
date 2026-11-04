@@ -1,8 +1,8 @@
-import ElmLean.Html
+import LeanNative.Html
 import LeanMailApp.Msg
 
 namespace LeanMailApp.View
-open ElmLean
+open LeanNative
 
 /-- The last error, in red, or nothing. -/
 def errorText (m : Model) (id : String) : List (Html Msg) :=

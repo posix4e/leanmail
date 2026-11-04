@@ -2,7 +2,7 @@ import LeanMailApp.Msg
 
 /-! # Commands: what a message asks the host to do
 
-`cmds msg m` is computed from the same pre-state `update msg m` sees (`ElmLean.Session.step`). Two rules
+`cmds msg m` is computed from the same pre-state `update msg m` sees (`LeanNative.Session.step`). Two rules
 hold of every command list the app ever issues, and `Gate.lean` checks their proofs:
 
 * **signed out, no API command**: a model without a session asks for no `Cmd.api` (the only commands

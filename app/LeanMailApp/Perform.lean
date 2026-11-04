@@ -1,7 +1,8 @@
 import Std.Time
-import ElmLean.Native
-import ElmLean.Native.Client.Http
-import ElmLean.Native.Client.Keychain
+import LeanNative.Native
+import LeanNative.Native.Client.Http
+import LeanNative.Native.Client.HttpRequest
+import LeanNative.Native.Client.Keychain
 import Core.Ulid
 import LeanMailApp.App
 
@@ -19,7 +20,7 @@ import LeanMailApp.App
 Anything slow runs in a task: `perform` is called on the shell's main thread. -/
 
 namespace LeanMailApp
-open ElmLean ElmLean.Native Lean
+open LeanNative LeanNative.Native Lean
 
 def sessionItem : Client.Keychain.Item := { key := "session" }
 

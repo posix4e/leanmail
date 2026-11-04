@@ -15,10 +15,9 @@ permissions:
 
 jobs:
   app:
-    uses: LeanNative/leannative/.github/workflows/ios-app.yml@1d887a119c9b06ad84740195537f070a270efa98
+    uses: LeanNative/leannative/.github/workflows/ios-app.yml@59f62db5059597093b8318941e5e6e02ae745704
     with:
-      elmlean: 1d887a119c9b06ad84740195537f070a270efa98
-      runs-on: xcode-27
+      leannative: 59f62db5059597093b8318941e5e6e02ae745704
       lean-packages: lean app
       build-targets: |
         app leanmail-app-cli
@@ -27,5 +26,6 @@ jobs:
       scheme: LeanMailApp
       tests: |
         app .lake/build/bin/leanmail-app-cli selftest
-      ui-before: ${{ github.workspace }}/app/ios/ui-before
-      ui-after: ${{ github.workspace }}/app/ios/ui-after
+      # relative to the checkout: `github.workspace` is empty where a reusable workflow's `with:` is read
+      ui-before: app/ios/ui-before
+      ui-after: app/ios/ui-after

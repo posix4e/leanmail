@@ -1,11 +1,11 @@
-import ElmLean.CmdCli
+import LeanNative.CmdCli
 import LeanMailApp.App
 
 /-! The app on stdin/stdout (PROTOCOL.md): `leanmail-app-cli selftest` explores it from its initial model
 with sample host answers and re-checks, in every reached model, the two command rules that
 `Gate.lean` proves. -/
 
-open ElmLean Lean LeanMailApp
+open LeanNative Lean LeanMailApp
 
 def sampleSession : Session := { origin := "http://127.0.0.1:8080", cred := .dev }
 

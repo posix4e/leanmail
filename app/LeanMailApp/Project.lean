@@ -1,9 +1,9 @@
-import ElmShell.Manifest
+import LeanNativeShell.Manifest
 
 /-! LeanMail's Xcode project: `lake exe ios-project` writes its XcodeGen spec (framework/native/ci/build-ios
 runs it). The app never imports this module. -/
 
-open ElmShell Lean
+open LeanNativeShell Lean
 
 def manifest : Manifest where
   name := "LeanMailApp"
@@ -16,7 +16,7 @@ def manifest : Manifest where
   -- App Store Connect refuses an iPad build without all four (iPad multitasking)
   orientations := some ([.portrait, .landscapeLeft, .landscapeRight],
                          [.portrait, .portraitUpsideDown, .landscapeLeft, .landscapeRight])
-  uses := ["http.request", "keychain.*", "build", "paths"]
+  uses := ["http.*", "keychain.*", "build", "paths"]
   icon := some "Assets.xcassets"
   uiTests := some {}
   -- The shared LeanNative shell links CoreBluetooth and LocalAuthentication for every app, so App Store
