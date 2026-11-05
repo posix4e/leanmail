@@ -3,8 +3,10 @@
 logging:
   level: info
   type: json
+# A restore holds one open R2 stream per file in its plan, so a long plan fails. Hourly snapshots
+# keep the plan to an hour of files, even when compaction has stalled.
 snapshot:
-  interval: 24h
+  interval: 1h
   retention: 168h
 dbs:
   - path: ${DATA_DIR}/mail.db
