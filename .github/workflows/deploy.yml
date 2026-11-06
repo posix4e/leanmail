@@ -12,7 +12,7 @@ name: deploy
 #             CLOUDFLARE_ACCOUNT_ID
 # Production's vars (PUBLIC_ORIGIN, SIGNUP_MODE, ADMIN_EMAILS...) are the committed
 # worker/wrangler.jsonc; the deploy refuses a PUBLIC_ORIGIN there that is not a public https origin
-# (`wrangler dev` takes the local one from worker/.dev.vars), and checks /health on it afterwards.
+# (`wrangler dev` takes the local one from worker/.dev.vars), and checks it afterwards.
 # Without CLOUDFLARE_API_TOKEN the deploy job is skipped (forks, and installs that deploy by hand).
 on:
   push:
@@ -119,3 +119,17 @@ jobs:
             sleep 5
           done
           echo "$PUBLIC_ORIGIN/health did not answer"; exit 1
+
+      # /health is the Worker alone, and stayed 200 through a two-day outage of the operator container.
+      # /signin goes through that container, so it fails when the container cannot start. A rollout
+      # replaces containers gradually, so this can still reach one that runs the previous image.
+      - name: A container answers
+        if: steps.creds.outputs.go == 'true'
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -m 90 -w '%{http_code}' "$PUBLIC_ORIGIN/signin" || true)
+            echo "attempt $i: /signin $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "$PUBLIC_ORIGIN/signin did not answer"; exit 1
