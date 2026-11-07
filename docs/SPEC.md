@@ -1,8 +1,8 @@
 # LeanMail specification
 
-Generated 2026-11-02 (UTC) by `scripts/spec.sh` from the test suites. Do not edit by hand.
+Generated 2026-11-06 (UTC) by `scripts/spec.sh` from the test suites. Do not edit by hand.
 
-1495 passing checks: core-test 67, address-test 103, ical-test 666, junk-test 117, server-test 422, worker 103, cli-smoke 17.
+1554 passing checks: core-test 67, address-test 103, ical-test 666, junk-test 117, server-test 426, worker 158, cli-smoke 17.
 
 Each bullet is the name of a check that passed, in the order its suite runs it. To change
 this file, change the tests and run `make spec`; CI fails when it is out of date.
@@ -982,7 +982,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 
 ## server-test
 
-`lean/test`, run as `lake build server-test && ./.lake/build/bin/server-test`; 422 checks.
+`lean/test`, run as `lake build server-test && ./.lake/build/bin/server-test`; 426 checks.
 
 - sha256 of 'abc' matches the FIPS vector
 - hmac-sha256 matches RFC 4231 test case 2
@@ -1084,10 +1084,14 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - a bad retention_days is 400
 - a session seen over an hour ago slides and gets a fresh cookie
 - POST /api/tokens returns an lm1 token once
+- a minted token is registered with the Worker by hash, with its scopes
 - a read token reads, may not act, and is no session
 - a tampered bearer token is 401
 - GET /api/tokens lists the token without the secret
+- a revocation the Worker did not hear of fails and leaves the token alive
 - a revoked API token stops working
+- the Worker hears of the revocation by the same hash
+- revoking twice is a 404
 - POST /auth/code with the right code yields an lm1 token that reads mail
 - a code works once
 - sec: five wrong codes lock that link's code, but never spend the link itself
@@ -1409,7 +1413,7 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 
 ## worker
 
-`worker/test`, run as `npm test` (vitest in the Workers pool); 103 tests.
+`worker/test`, run as `npm test` (vitest in the Workers pool); 158 tests.
 
 ### test/auth.test.ts
 
@@ -1418,23 +1422,17 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - /internal/email/send and MAIL_FROM › an account may no longer send as MAIL_FROM through /internal/email/send; the operator still may
 - item 3: PUT /internal/accounts replace_domains_for › drops the account's unlisted domains, leaves others' alone, and keeps has_gmail when absent
 - item 4: POST /internal/wake/:acct {provision} › proxies POST /internal/provision to the account and returns its reply; no body is a plain wake
-- item 5: public auth routes › POST /auth/signup goes to the operator with cf-connecting-ip, and nothing client-stamped
-- item 5: public auth routes › POST /auth/login answers 202 to all, asking only an active account's container for a link
-- item 5: public auth routes › POST /auth/login with the no-JS form answers 303 /signin?sent=1 for any email
-- item 5: public auth routes › rate-limits /auth/login and the code routes to 10 an hour per client IP
-- item 5: public auth routes › GET /auth/magic?t= goes to the account its MAC names; a bad link is a 400 page
-- item 5: public auth routes › POST /auth/code and /signin/code go to the email's active account, else the operator
+- item 5: public auth routes › rate-limits /auth/login and /auth/code to 10 an hour per client IP, each on its own
 - item 6: /admin/* › a JSON or script request goes to the operator with the cookie's account; a navigation to the account's shell
 - item 6: /admin/* › without a valid cookie: 401 for JSON, 302 /signin for a navigation; a bearer is not enough
 - item 7 and the page addendum: everything else › signed-out sign-in pages and static files go to the operator; with a cookie, to the account
 - item 7 and the page addendum: everything else › a cookie or bearer reaches its account; signed out, a navigation is sent to /signin and an API call is 401
 - item 7 and the page addendum: everything else › DEV_ACCOUNT still answers signed-out requests on localhost only
 - M9b: passkey login › POST /auth/passkey/challenge mints v1.<rand>.<exp>.<mac> with the rp id; it verifies until it expires
-- M9b: passkey login › a challenge is not a magic link, and a magic link or cookie is not a challenge
+- M9b: passkey login › a magic link or cookie is not a challenge
 - M9b: passkey login › POST /auth/passkey/login goes to the account userHandle names, with the challenge vouched for under that account's key
 - M9b: passkey login › refuses, without waking a container: unknown, pending and _operator handles, no handle, a bad or expired challenge
 - M9b: the sign-up page › signed out, GET and POST /signup go to the operator; with a cookie, to the account
-- M9b: the sign-up page › the form POST /auth/signup reaches the operator as JSON and answers 303 by the outcome
 - RP_ID › is used only when it is the origin's host or a parent domain of it
 
 ### test/email.test.ts
@@ -1463,6 +1461,35 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - google oauth callback › routes to the account the state's MAC names
 - google oauth callback › refuses a forged state, a magic-link-shaped token and one signed for another account
 - X-Next-Wake › is whole seconds clamped to a minute .. a day
+
+### test/gmailsync.test.ts
+
+- connecting › asks only to read, and leaves no secret in storage or in what clients can see
+- connecting › unseals the stored grant when the access token runs out
+- connecting › refuses a used, expired or denied consent, and a state it cannot verify
+- connecting › takes only a real client id, and only a full token may change the connection
+- connecting › forgets the connection and stops the watch, keeping the mail
+- the backfill › brings the whole mailbox into the log, over many alarms, with what a client files it by
+- the backfill › stays within its budget in each alarm
+- the backfill › keeps forever when asked, and fetches nothing it already holds on a second run
+- the backfill › pauses, resumes and cancels
+- the backfill › does not let one bad message hold up the pages after it
+- the backfill › leaves out what is too big to hold, says so, and carries on
+- new mail › reaches the log from a push while no device is doing anything, once each
+- new mail › is found by the periodic poll when no push ever comes
+- new mail › walks a long history across alarms without losing a message
+- new mail › recovers from a history gap by listing what may have been missed
+- new mail › ignores a push for another mailbox, and sends one for an unconnected account to the container
+- when Google is not cooperating › backs off an outage and picks up where it stopped
+- when Google is not cooperating › treats an outage during a fetch as an outage, not the message's fault
+- when Google is not cooperating › stops on a revoked grant, says so, and a reconnect starts it again
+- when Google is not cooperating › gives one bad message its own retries without holding up the rest
+- when Google is not cooperating › drops a message Gmail no longer has
+- when Google is not cooperating › does not store a message twice when a run dies between R2 and the log
+- when Google is not cooperating › restores the Gmail fields when the sweep has to rebuild an entry
+- the daily cron › restores a lost alarm
+- the watch › costs only speed when the topic does not work, and is not retried in every alarm
+- the watch › starts when a topic is set and renews near its end
 
 ### test/hardening.test.ts
 
@@ -1534,6 +1561,47 @@ this file, change the tests and run `make spec`; CI fails when it is out of date
 - upserts › upserts routes, and replace removes the account's other rows only
 - upserts › upserts accounts and domains; lists active accounts
 - ulid › is 26 Crockford characters carrying the time
+
+### test/signin.test.ts
+
+- a new person, with no container running › SIGNUP_MODE=open: signs up, gets a welcome code, and reads /sync with the token it buys
+- a new person, with no container running › SIGNUP_MODE=approve: nothing until an admin approves; then a welcome code
+- a new person, with no container running › a rejected sign-up leaves no account, and the address may ask again
+- a new person, with no container running › approving does not bring back an account disabled meanwhile
+- a new person, with no container running › only an admin's token decides: a plain account is refused, signed out is 401, an unknown id 404
+- a new person, with no container running › a sign-up never touches an account that exists; closed means 404 for everyone; a bad address is 400
+- a new person, with no container running › two sign-ups racing for one address make one account and one sign-up
+- someone who already had an account › signs in with their email and finds the mail already in R2 under the same account
+- a code › works once, and the store holds no code
+- a code › names the token, default `app`
+- a code › from one account does nothing for another
+- a code › expires after 15 minutes; a welcome code lasts a day
+- a code › dies after five wrong guesses, and used-up codes do not stop a new one being asked for
+- a code › is capped at three live: a fourth request mails nothing, and spending one frees a slot
+- a code › is answered alike for an address with no account, a pending one and a disabled one, and none gets mail
+- a code › stops working when the account is disabled, as does the token it bought
+- a code › a mail that fails to send is still a 202: the answer says nothing about the account
+- a code › reads as a code alone: no link to a page that no longer exists
+- a device's tokens › lists each sign-in, and a lost phone can be revoked from the laptop
+- a device's tokens › a read-only token may sign itself out but not another; an unknown id is 404
+- a device's tokens › one account's token cannot see or revoke another's
+
+### test/sync.test.ts
+
+- a client following the mailbox › sees delivered mail in order, reads it, and only ever asks for what is new
+- a client following the mailbox › gets a 404, not an error, for a message that has expired
+- mail the log missed › fills in on the first sync: mail from before the log, Gmail's old dates, and nothing twice
+- mail the log missed › delivery still succeeds when the log cannot be written, and the daily sweep adds the message
+- who gets in › refuses no credential, a bad MAC, a token never registered, and the session cookie
+- who gets in › stops a token as soon as its container revokes it, and a late registration cannot bring it back
+- who gets in › holds a token to its scopes
+- who gets in › keeps accounts apart
+- who gets in › refuses a disabled account's token
+- who gets in › refuses a bad cursor and a path that is not a ULID
+- settings across devices › reaches a second device through the log and its first snapshot, with a version per key
+- settings across devices › adds nothing to the log when a device saves what is already set
+- settings across devices › takes only the known keys, checked, and changes nothing when any one is bad
+- settings across devices › lets default_from be an address this account can send as, or empty
 
 ## cli-smoke
 

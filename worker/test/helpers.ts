@@ -5,7 +5,7 @@ export const env = rawEnv as unknown as Env;
 export const SECRET = "test-internal-secret";
 
 export async function resetDb(): Promise<void> {
-  await env.DB.batch(["accounts", "domains", "routes", "forward_window", "auth_rate"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
+  await env.DB.batch(["accounts", "domains", "routes", "forward_window", "auth_rate", "signups"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
 }
 
 export async function addRoute(address: string, account_id: string, mail: string, forward_to: string[] = [], can_send = 0): Promise<void> {

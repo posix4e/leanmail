@@ -23,6 +23,10 @@
 			{
 				"name": "MAIL",
 				"class_name": "MailContainer"
+			},
+			{
+				"name": "LOG",
+				"class_name": "AccountLog"
 			}
 		]
 	},
@@ -32,9 +36,15 @@
 			"new_sqlite_classes": [
 				"MailContainer"
 			]
+		},
+		{
+			"tag": "v2",
+			"new_sqlite_classes": [
+				"AccountLog"
+			]
 		}
 	],
-	// D1 `leanmail-ctl`: projection tables only (accounts, domains, routes, forward_window, auth_rate).
+	// D1 `leanmail-ctl`: accounts, sign-ups, domains, routes, forward_window, auth_rate.
 	// Exactly one binding, DB; the id is the database `wrangler d1 create leanmail-ctl` made.
 	"d1_databases": [
 		{

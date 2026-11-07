@@ -1,3 +1,4 @@
+import { AccountLog, logFor } from "./accountlog";
 import { MailContainer } from "./container";
 import { handleEmail } from "./email";
 import type { Env } from "./env";
@@ -7,10 +8,11 @@ import { handleGmailHook, handleOAuthCallback } from "./gmail";
 import { errText, log } from "./log";
 import { canonicalPath, firstSegment } from "./paths";
 import { listActiveAccounts } from "./routes";
+import { handleSync } from "./sync";
 import { accountFromRequest } from "./tokens";
 import { callContainer } from "./wake";
 
-export { MailContainer };
+export { AccountLog, MailContainer };
 export type { Env };
 
 const WORKER_VERSION = "0.1.0";
@@ -48,12 +50,19 @@ const tickContainer: TickFn = async (env, acct) => {
   if (!res.ok) throw new Error(`tick status ${res.status}`);
 };
 
-/** The daily cron: wake every active account for its daily jobs. Errors are logged per account. */
+/** The daily cron: sweep every active account's log, then wake it for its daily jobs. Errors are logged per account. */
 export async function dailyTick(env: Env, tick: TickFn = tickContainer): Promise<{ ok: number; failed: number }> {
   await pruneAuthRate(env.DB).catch((e) => log("cron.prune_failed", { error: errText(e) }));
   const accounts = await listActiveAccounts(env.DB);
   const out = { ok: 0, failed: 0 };
   await mapLimit(accounts, DAILY_CONCURRENCY, async (acct) => {
+    try {
+      const added = await logFor(env, acct).sweep(acct, Date.now());
+      if (added) log("cron.swept", { acct, added });
+      await logFor(env, acct).gmailEnsureAlarm(Date.now());
+    } catch (e) {
+      log("cron.sweep_failed", { acct, error: errText(e) });
+    }
     try {
       await tick(env, acct);
       out.ok++;
@@ -79,7 +88,7 @@ function isPublicPage(method: string, path: string): boolean {
  * and a client never reaches a container's. (`/internal/../internal/x` is `/internal/x` once the
  * URL is parsed, so it is that handler's, behind a container secret.) Every later check, and the
  * container, sees the canonical path. Order: /health; /internal/* (containers); the Gmail hook and OAuth
- * callback (src/gmail.ts); the sign-in routes and
+ * callback (src/gmail.ts); /sync/* (src/sync.ts); the sign-in routes and
  * /admin/* (src/auth.ts); a MAC-verified cookie or bearer → that account; DEV_ACCOUNT on
  * localhost; signed-out sign-in and sign-up pages and static files → the operator; a signed-out browser
  * navigation → 302 /signin; anything else 401.
@@ -102,6 +111,7 @@ export async function handleFetch(request: Request, env: Env, ctx: ExecutionCont
   // Gmail: Pub/Sub push (signed URL) and Google's OAuth redirect (MAC'd state), src/gmail.ts
   if (url.pathname.startsWith("/hooks/gmail/")) return handleGmailHook(request, env, ctx);
   if (url.pathname === "/oauth/google/callback") return handleOAuthCallback(request, env);
+  if (url.pathname === "/sync" || url.pathname.startsWith("/sync/")) return handleSync(request, env, ctx);
   const auth = await handleAuth(request, env, ctx);
   if (auth) return auth;
   const accountId = await accountFor(request, env);

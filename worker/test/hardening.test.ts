@@ -419,7 +419,7 @@ describe("5: non-GET /admin/*", () => {
   it("needs Origin = PUBLIC_ORIGIN and X-Requested-With: LeanMail", async () => {
     const { e, calls } = stubbed();
     const cookie = await cookieFor("a1");
-    const post = (h: Record<string, string>) => fetchVia(e, "/admin/signups/01J/approve", { method: "POST", headers: { cookie, accept: "application/json", ...h } });
+    const post = (h: Record<string, string>) => fetchVia(e, "/admin/accounts/a2/disable", { method: "POST", headers: { cookie, accept: "application/json", ...h } });
     expect((await post({})).status).toBe(403);
     expect((await post({ origin: ORIGIN })).status).toBe(403);
     expect((await post({ "x-requested-with": "LeanMail" })).status).toBe(403);
@@ -429,10 +429,10 @@ describe("5: non-GET /admin/*", () => {
     expect(put.status).toBe(403);
     expect(calls).toEqual([]);
     expect((await post({ origin: ORIGIN, "x-requested-with": "LeanMail" })).status).toBe(200);
-    expect((await fetchVia(e, "/admin/signups", { headers: { cookie, accept: "application/json" } })).status).toBe(200);
-    expect(calls.map((c) => `${c.acct} ${c.path} ${c.opts.adminAccount}`)).toEqual(["_operator /admin/signups/01J/approve a1", "_operator /admin/signups a1"]);
+    expect((await fetchVia(e, "/admin/accounts", { headers: { cookie, accept: "application/json" } })).status).toBe(200);
+    expect(calls.map((c) => `${c.acct} ${c.path} ${c.opts.adminAccount}`)).toEqual(["_operator /admin/accounts/a2/disable a1", "_operator /admin/accounts a1"]);
     // Signed out is still 401 first.
-    expect((await fetchVia(e, "/admin/signups/01J/approve", { method: "POST", headers: { accept: "application/json" } })).status).toBe(401);
+    expect((await fetchVia(e, "/admin/accounts/a2/disable", { method: "POST", headers: { accept: "application/json" } })).status).toBe(401);
   });
 });
 
@@ -469,7 +469,7 @@ describe("6: IPv6 /64 rate limit", () => {
     for (let i = 0; i < AUTH_RATE_PER_HOUR; i++) expect((await login(`2001:db8::${i + 1}`)).status).toBe(202);
     expect((await login("2001:db8::abcd")).status).toBe(429);
     const code = (ip: string) => fetchVia(e, "/auth/code", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": ip }, body: '{"email":"x@x.example","code":"1"}' });
-    for (let i = 0; i < AUTH_RATE_PER_HOUR; i++) expect((await code(`2001:db8:9::${i + 1}`)).status).toBe(200);
+    for (let i = 0; i < AUTH_RATE_PER_HOUR; i++) expect((await code(`2001:db8:9::${i + 1}`)).status).toBe(400);
     expect((await code("2001:db8:9::ffff")).status).toBe(429);
   });
 });

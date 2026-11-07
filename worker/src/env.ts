@@ -1,8 +1,10 @@
+import type { AccountLog } from "./accountlog";
 import type { ContainerEnv, MailContainer } from "./container";
 
 /** Every binding, var and secret the Worker reads. */
 export interface Env extends ContainerEnv {
   MAIL: DurableObjectNamespace<MailContainer>;
+  LOG: DurableObjectNamespace<AccountLog>;
   DB: D1Database;
   RAW: R2Bucket;
   EMAIL: SendEmail;

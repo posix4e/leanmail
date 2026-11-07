@@ -86,7 +86,10 @@ for s in "${lean_suites[@]}"; do lean_suite "$s"; done
 # the Worker: vitest's JSON report, test files by name, tests in declaration order
 say "worker: vitest run"
 ( cd "$root/worker" && npx vitest run --reporter=json --outputFile="$tmp/vitest.json" ) >"$tmp/vitest.log" 2>&1 \
-  || { tail -40 "$tmp/vitest.log" >&2; die "worker tests"; }
+  || { tail -40 "$tmp/vitest.log" >&2
+       node -e 'for (const f of require(process.argv[1]).testResults) for (const t of f.assertionResults)
+         if (t.status === "failed") console.error(`FAIL ${t.fullName}\n  ${(t.failureMessages[0] ?? "").split("\n")[0]}`)' "$tmp/vitest.json" || true
+       die "worker tests"; }
 node - "$tmp/vitest.json" "$root/worker/" >"$tmp/worker.md" 2>"$tmp/worker.err" <<'JS' || { cat "$tmp/worker.err" >&2; die "reading the vitest report"; }
 const fs = require("fs");
 const [file, prefix] = process.argv.slice(2);

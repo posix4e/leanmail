@@ -172,32 +172,40 @@ the catch-all and rule changes above for each domain it manages.
 
 ## 6. First run
 
-1. **Sign up.** Open `https://mail.example.com/signup` and enter your address, or post it:
+1. **Sign up.** Post your address:
 
    ```bash
    curl -X POST https://mail.example.com/auth/signup \
      -H 'content-type: application/json' -d '{"email": "you@example.com"}'
    ```
 
-   The API always answers `202` (the form shows a thanks page). With `SIGNUP_MODE=approve` (or `open`) and your address in
-   `ADMIN_EMAILS`, the sign-up is approved at once and your account is an admin: the operator
-   creates your account, starts your container, and mails a welcome link from `MAIL_FROM` (valid
-   24 hours).
-2. **Sign in.** Follow the link, or open `https://mail.example.com/signin`, enter your address, and
-   use the link or the six-digit code it mails you (valid 15 minutes).
-   Once in, **Settings → Passkeys → Add a passkey** lets you sign in with Touch ID, Face ID, Windows
-   Hello or a security key next time. The passkey's relying party is the host of `PUBLIC_ORIGIN`
-   (or `RP_ID`), so a passkey made on one origin does not work on another, and an IP address (the local default
-   `http://127.0.0.1:8787`) cannot hold one: use `http://localhost:8787` to try passkeys locally.
+   The API always answers `202`. With `SIGNUP_MODE=approve` (or `open`) and your address in
+   `ADMIN_EMAILS`, the sign-up is approved at once: the Worker creates your account, with no
+   container, and mails a welcome code from `MAIL_FROM` (valid 24 hours).
+2. **Sign in.** The app does this for you. By hand, ask for a code (valid 15 minutes) and exchange
+   it for an API token, shown once:
+
+   ```bash
+   curl -X POST https://mail.example.com/auth/login \
+     -H 'content-type: application/json' -d '{"email": "you@example.com"}'
+   ```
+
+   ```bash
+   curl -X POST https://mail.example.com/auth/code \
+     -H 'content-type: application/json' -d '{"email": "you@example.com", "code": "123456", "name": "laptop"}'
+   ```
+
+   Browser sign-in is gone, so steps 3 to 5 below, which use the web pages, have no way in until
+   those settings move to the Worker. Signing up, signing in, `/sync` and Gmail need none of them.
 3. **Give yourself your domain.** **Admin → Accounts**: put `example.com` in your account's
    domains and save. The Worker accepts routes only for domains an admin granted to that account.
 4. **Route it.** **Settings → Routing**: add `example.com`, choose what its addresses do by default
    (keep in LeanMail), add any per-address rules and the addresses you send from, and save. Each
    change is pushed to the Worker at once. Send yourself a message from another provider; it should
    be in the inbox within seconds of arriving.
-5. **Others.** Each person signs up at `/signup` the same way; approve them at
-   **Admin → Sign-ups**. An approved person gets their own container and database and a welcome
-   link. Grant them domains in **Admin → Accounts**.
+5. **Others.** Each person signs up the same way. An admin's token approves them with
+   `POST /admin/signups/<id>/approve` (the app's Admin screen does this), and they get a welcome
+   code. Grant them domains in **Admin → Accounts**.
 
 ## 7. The CLI
 
