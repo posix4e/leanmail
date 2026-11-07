@@ -1,3 +1,4 @@
+import { logFor } from "./accountlog";
 import type { Env } from "./env";
 import { errText, log } from "./log";
 import { domainOf, lookupRoute, normAddress, ownDomains } from "./routes";
@@ -137,6 +138,13 @@ export async function handleEmail(message: ForwardableEmailMessage, env: Env, ct
     customMetadata: { rcpt, from: message.from, received_at: String(now), source: "route", size: String(bytes.byteLength) },
   });
   await env.RAW.put(`in/${acct}/${id}`, new Uint8Array(0));
+  // The raw is durable from here, so a log failure is logged, never thrown (a retry would store
+  // again). The daily sweep adds what is missing.
+  try {
+    await logFor(env, acct).appendMail({ ulid: id, at: now, rcpt, from: message.from, size: bytes.byteLength, source: "route" });
+  } catch (e) {
+    log("email.log_failed", { acct, ulid: id, error: errText(e) });
+  }
   ctx.waitUntil(wake(env, acct, id));
 
   let forwarded = 0;

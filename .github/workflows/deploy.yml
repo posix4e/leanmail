@@ -1,6 +1,8 @@
 name: deploy
 
-# Deploys the Worker and the container image to Cloudflare on every push to main.
+# Deploys the Worker to Cloudflare on every push to main. Not the container image: sign-in, /sync and
+# Gmail need no container, the servers are on their way out, and the last image built crashes on
+# start. `--containers-rollout=none` leaves whatever is deployed alone and builds nothing.
 #
 # Secrets are set by hand, once, with `npx wrangler secret put <NAME>` (docs/SELF-HOSTING.md), and
 # never by CI: this workflow holds only the deploy credentials. `wrangler deploy` keeps the secrets
@@ -8,7 +10,7 @@ name: deploy
 #
 # Repository settings this needs:
 #   secrets   CLOUDFLARE_API_TOKEN   start from Cloudflare's "Edit Cloudflare Workers" token template and
-#                                    add what `wrangler deploy` reports missing (D1, R2, Containers)
+#                                    add what `wrangler deploy` reports missing (D1, R2)
 #             CLOUDFLARE_ACCOUNT_ID
 # Production's vars (PUBLIC_ORIGIN, SIGNUP_MODE, ADMIN_EMAILS...) are the committed
 # worker/wrangler.jsonc; the deploy refuses a PUBLIC_ORIGIN there that is not a public https origin
@@ -88,28 +90,15 @@ jobs:
       - working-directory: worker
         run: npm test
 
-      # The Linux Lean toolchain and Litestream tarballs the image build COPYs (server/.cache).
-      - name: Cache the image's toolchain tarballs
-        if: steps.creds.outputs.go == 'true'
-        uses: actions/cache@v4
-        with:
-          path: server/.cache
-          key: toolchain-${{ hashFiles('lean/lean-toolchain', 'Makefile') }}
-      - name: Fetch the toolchain tarballs
-        if: steps.creds.outputs.go == 'true'
-        run: make toolchain-cache
-
       - name: Apply D1 migrations
         if: steps.creds.outputs.go == 'true'
         working-directory: worker
         run: npx wrangler d1 migrations apply leanmail-ctl --remote
 
-      # Builds server/Dockerfile (linux/amd64; native on this runner), pushes it to Cloudflare's
-      # registry and rolls the Worker and its containers.
       - name: Deploy
         if: steps.creds.outputs.go == 'true'
         working-directory: worker
-        run: npx wrangler deploy
+        run: npx wrangler deploy --containers-rollout=none
 
       - name: Health check
         if: steps.creds.outputs.go == 'true'
@@ -120,16 +109,11 @@ jobs:
           done
           echo "$PUBLIC_ORIGIN/health did not answer"; exit 1
 
-      # /health is the Worker alone, and stayed 200 through a two-day outage of the operator container.
-      # /signin goes through that container, so it fails when the container cannot start. A rollout
-      # replaces containers gradually, so this can still reach one that runs the previous image.
-      - name: A container answers
+      # /health is the Worker alone. A bad address reaches /auth/login's rate limit and so D1, and is
+      # refused before anything is mailed, so this signs nobody in and bothers nobody.
+      - name: Sign-in answers
         if: steps.creds.outputs.go == 'true'
         run: |
-          for i in $(seq 1 12); do
-            code=$(curl -s -o /dev/null -m 90 -w '%{http_code}' "$PUBLIC_ORIGIN/signin" || true)
-            echo "attempt $i: /signin $code"
-            if [ "$code" = "200" ]; then exit 0; fi
-            sleep 10
-          done
-          echo "$PUBLIC_ORIGIN/signin did not answer"; exit 1
+          code=$(curl -s -o /dev/null -m 30 -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"email":"x"}' "$PUBLIC_ORIGIN/auth/login" || true)
+          echo "/auth/login $code"
+          if [ "$code" != "400" ]; then echo "$PUBLIC_ORIGIN/auth/login did not answer as expected"; exit 1; fi

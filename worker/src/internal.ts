@@ -1,4 +1,5 @@
 import { EmailMessage } from "cloudflare:email";
+import { logFor } from "./accountlog";
 import type { Env } from "./env";
 import { errText, log } from "./log";
 import {
@@ -99,7 +100,7 @@ async function readJson(request: Request, max = 36 * 1024 * 1024): Promise<Recor
   return v as Record<string, unknown>;
 }
 
-function isAddress(s: unknown): s is string {
+export function isAddress(s: unknown): s is string {
   return typeof s === "string" && s.length <= 320 && ADDRESS_RE.test(normAddress(s));
 }
 
@@ -196,10 +197,10 @@ const LINK_TOKEN_RE = /^[A-Za-z0-9._~%-]+$/;
 export type SigninKind = "signin" | "welcome";
 
 /** The sign-in (or welcome) message the Worker writes itself: plain text, 7-bit, CRLF. */
-export function signinMessage(m: { from: string; to: string; kind: SigninKind; link: string; code: string; now: number; id: string }): string {
+export function signinMessage(m: { from: string; to: string; kind: SigninKind; link?: string; code: string; now: number; id: string }): string {
   const subject = m.kind === "welcome" ? "Welcome to LeanMail" : "Sign in to LeanMail";
   const date = new Date(m.now).toUTCString().replace(/GMT$/, "+0000");
-  const intro = m.kind === "welcome" ? ["Welcome to LeanMail: your account is ready.", "", "Open this link to sign in:"] : ["Open this link to sign in to LeanMail:"];
+  const welcome = m.kind === "welcome" ? ["Welcome to LeanMail: your account is ready.", ""] : [];
   const outro = m.kind === "welcome" ? [] : ["", "If you did not ask to sign in, ignore this message."];
   const head = [
     `From: LeanMail <${m.from}>`,
@@ -212,7 +213,10 @@ export function signinMessage(m: { from: string; to: string; kind: SigninKind; l
     "Content-Transfer-Encoding: 7bit",
     "Auto-Submitted: auto-generated",
   ];
-  const text = [...intro, m.link, "", `Or enter this code: ${m.code}`, "", "The link and the code work once, and expire soon.", ...outro];
+  const body = m.link
+    ? [m.kind === "welcome" ? "Open this link to sign in:" : "Open this link to sign in to LeanMail:", m.link, "", `Or enter this code: ${m.code}`, "", "The link and the code work once, and expire soon."]
+    : [`Your LeanMail sign-in code: ${m.code}`, "", "It works once, and expires soon."];
+  const text = [...welcome, ...body, ...outro];
   return `${head.join("\r\n")}\r\n\r\n${text.join("\r\n")}\r\n`;
 }
 
@@ -243,25 +247,35 @@ async function emailSignin(request: Request, env: Env, caller: string, now: numb
   if (!(await validSigninLink(env, link, caller))) throw new HttpError(400, "bad_link");
   const row = await env.DB.prepare("SELECT email FROM accounts WHERE id = ?1").bind(caller).first<{ email: string }>();
   if (!row || normAddress(row.email) !== normAddress(to)) throw new HttpError(403, "not_your_email");
-  const from = mailFrom(env);
-  if (!isAddress(from)) {
-    log("internal.email_signin_unconfigured", { acct: caller });
-    return json(503, { error: "mail_from_invalid" });
-  }
-  if (await overLimit(env.DB, [`signin_mail:${caller}`], SIGNIN_MAIL_PER_HOUR, now)) {
-    log("internal.email_signin_limited", { acct: caller });
+  const sent = await sendSigninMail(env, caller, normAddress(to as string), kind, code, now, link as string);
+  if (sent === "unconfigured") return json(503, { error: "mail_from_invalid" });
+  if (sent === "limited") {
     return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers: { "content-type": "application/json", "retry-after": "3600" } });
   }
-  const rcpt = normAddress(to);
-  const raw = signinMessage({ from, to: rcpt, kind, link: link as string, code, now, id: mintUlid(now) });
+  if (sent === "failed") return json(502, { ok: false });
+  return json(200, { ok: true });
+}
+
+/** Write a sign-in or welcome mail and send it from MAIL_FROM, 20 an hour per account. */
+export async function sendSigninMail(env: Env, acct: string, rcpt: string, kind: SigninKind, code: string, now: number, link?: string): Promise<"sent" | "unconfigured" | "limited" | "failed"> {
+  const from = mailFrom(env);
+  if (!isAddress(from)) {
+    log("internal.email_signin_unconfigured", { acct });
+    return "unconfigured";
+  }
+  if (await overLimit(env.DB, [`signin_mail:${acct}`], SIGNIN_MAIL_PER_HOUR, now)) {
+    log("internal.email_signin_limited", { acct });
+    return "limited";
+  }
+  const raw = signinMessage({ from, to: rcpt, kind, link, code, now, id: mintUlid(now) });
   try {
     await env.EMAIL.send(new EmailMessage(from, rcpt, raw));
   } catch (e) {
-    log("internal.email_signin_failed", { acct: caller, kind, error: errText(e) });
-    return json(502, { ok: false });
+    log("internal.email_signin_failed", { acct, kind, error: errText(e) });
+    return "failed";
   }
-  log("internal.email_signin", { acct: caller, kind });
-  return json(200, { ok: true });
+  log("internal.email_signin", { acct, kind });
+  return "sent";
 }
 
 // ---- GET /internal/grants, POST /internal/routing/{plan,apply} ----
@@ -383,6 +397,28 @@ async function putAccounts(request: Request, env: Env): Promise<Response> {
   return json(200, { ok: true, accounts: acc.length, domains: dom.length });
 }
 
+const TOKEN_HASH_RE = /^[0-9a-f]{64}$/;
+const TOKEN_SCOPES = new Set(["read", "draft", "send", "act", "junk"]);
+
+/**
+ * PUT /internal/tokens {hash, scopes} and POST /internal/tokens/revoke {hash}: a container tells its
+ * account's log about a token it minted or revoked, which is what /sync goes by (src/sync.ts). The
+ * hash is the SHA-256 of the whole token, in lower-case hex. A caller can only speak for itself.
+ */
+async function tokens(request: Request, env: Env, caller: string, revoke: boolean, now: number): Promise<Response> {
+  const body = await readJson(request, 4096);
+  const { hash, scopes } = body;
+  if (typeof hash !== "string" || !TOKEN_HASH_RE.test(hash)) throw new HttpError(400, "bad_hash");
+  if (revoke) {
+    await logFor(env, caller).revokeToken(hash, now);
+  } else {
+    if (!Array.isArray(scopes) || !scopes.every((s) => TOKEN_SCOPES.has(s as string))) throw new HttpError(400, "bad_scopes");
+    await logFor(env, caller).putToken(hash, scopes as string[], now);
+  }
+  log("internal.token", { acct: caller, revoke });
+  return json(200, { ok: true });
+}
+
 /** Route one `/internal/*` request. */
 export async function handleInternal(request: Request, env: Env, deps: Partial<InternalDeps> = {}): Promise<Response> {
   const wake = deps.wake ?? defaultWake;
@@ -407,6 +443,8 @@ export async function handleInternal(request: Request, env: Env, deps: Partial<I
     const rt = /^\/internal\/routing\/(plan|apply)$/.exec(pathname);
     if (m === "POST" && rt) return await routingForward(request, env, caller, rt[1]!, call);
     if (m === "PUT" && pathname === "/internal/routes") return await putRoutes(request, env, caller);
+    if (m === "PUT" && pathname === "/internal/tokens") return await tokens(request, env, caller, false, now);
+    if (m === "POST" && pathname === "/internal/tokens/revoke") return await tokens(request, env, caller, true, now);
     if (m === "PUT" && pathname === "/internal/accounts") {
       requireOperator(caller);
       return await putAccounts(request, env);

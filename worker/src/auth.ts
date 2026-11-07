@@ -1,34 +1,40 @@
-import { OPERATOR } from "./internal";
+import { logFor } from "./accountlog";
+import { OPERATOR, sendSigninMail, type SigninKind } from "./internal";
 import type { Env } from "./env";
 import { errText, log } from "./log";
 import { accountByEmail, normAddress } from "./routes";
-import { ACCOUNT_RE, accountFromRequest, b64uDecode, b64uEncode, bytesEqual, deriveSecret, verifyMac } from "./tokens";
-import { callContainer, containerFor } from "./wake";
+import { ALL_SCOPES, callerOf } from "./sync";
+import { ACCOUNT_RE, accountFromRequest, b64uDecode, b64uEncode, bytesEqual, deriveSecret, signMac } from "./tokens";
+import { ulid } from "./ulid";
+import { containerFor } from "./wake";
 import type { StampOptions } from "./container";
 import { HOUR_MS, ipv6Net64, overLimit, sha256Hex } from "./rate";
 
 /**
- * The public sign-in routes the Worker answers before any credential exists, per the contract at
- * the top of lean/Server/Operator.lean and lean/Server/Auth/Magic.lean:
+ * Sign-in, answered here with no container (apps and the CLI; there is no browser sign-in any more):
  *
- *   POST /auth/signup        → the operator container, as is (cf-connecting-ip passes through);
- *                              the no-JS form (urlencoded, from /signup) is sent on as JSON
- *                              {email, note} and answered with a 303 to /signup?sent=1
- *                              (?error=email|rate|failed; /signup itself when sign-ups are closed)
- *   POST /auth/passkey/challenge → a stateless login challenge (below), no account involved
- *   POST /auth/passkey/login → the account `userHandle` names, once the challenge verifies
- *   POST /auth/login {email} → D1 lookup; an active account's container gets
- *                              POST /internal/auth/magic {email, purpose:"signin"} in the
- *                              background; the client always gets 202 {ok:true} (JSON) or a 303
- *                              to /signin?sent=1 (the no-JS form, urlencoded)
- *   GET  /auth/magic?t=      → the account the link's MAC names
- *   POST /auth/code          → the account the email belongs to (JSON, native apps)
- *   POST /signin/code        → the same for the web form's 6-digit code
- *   /admin/*                 → MAC-verified lm_session cookie required; a browser navigation goes
- *                              to the cookie's account (the page shell), anything else to the
- *                              operator with x-admin-account: <cookie's account>; anything but
- *                              GET/HEAD also needs Origin = PUBLIC_ORIGIN and
- *                              X-Requested-With: LeanMail (else 403)
+ *   POST /auth/signup {email, note?}  202 for every address; 404 when SIGNUP_MODE=closed. A new
+ *                                     address gets a `pending` account and a sign-up an admin
+ *                                     decides, or an `active` account at once with SIGNUP_MODE=open
+ *                                     or an ADMIN_EMAILS address, and then a welcome code. A sign-up
+ *                                     never changes an account that already exists.
+ *   POST /auth/login {email}          202 for every address; an active account gets a code by mail,
+ *                                     in the background, so timing says nothing about who has one
+ *   POST /auth/code {email, code, name}  an API token with every scope, shown once; else 400
+ *   GET  /admin/signups               undecided sign-ups, for an ADMIN_EMAILS account's API token (`read`)
+ *   POST /admin/signups/<id>/approve  needs `act`; the account goes active and gets a welcome code
+ *   POST /admin/signups/<id>/reject   needs `act`; a pending account goes
+ *   /admin/*                          everything else: the lm_session cookie, to the operator, as before
+ *
+ * An account's id lasts: signing in with the email an older account has reaches that same account,
+ * and its mail in R2. There is nothing to migrate and no password to reset.
+ *
+ * A code is six digits, good for 15 minutes (a welcome code, 24 hours) and one use. The account's
+ * log object (src/accountlog.ts) keeps HMACs of its live codes, under a key derived from the
+ * master, so a copy of that storage hands out nothing. At most three live at once, each with five
+ * guesses; a wrong guess costs every live code one. A guesser can spend someone's codes that way,
+ * which the 10-an-hour limit below keeps to two rounds an hour, and a new code is one request away.
+ * An unknown email goes through the same steps against `_operator`, which holds no codes.
  *
  * Passkey login (lean/Server/Auth/Passkey.lean). The challenge is `v1.<rand>.<exp>.<mac>` with
  * mac = base64url(HMAC-SHA256(deriveSecret(master SESSION_SECRET, "passkey:challenge"),
@@ -44,7 +50,7 @@ import { HOUR_MS, ipv6Net64, overLimit, sha256Hex } from "./rate";
  * The container then checks the voucher, the origin, the signature and the sign count, spends the
  * challenge once, and starts the session.
  *
- * Rate limit: /auth/login and the two code routes, 10 an hour per cf-connecting-ip and, for an
+ * Rate limit: /auth/login, /auth/code and /auth/signup each, 10 an hour per cf-connecting-ip and, for an
  * IPv6 client, 10 an hour per its /64 too (one host can hold a whole /64), in D1 (`auth_rate`), so
  * every isolate shares one count (passkey logins likewise, in their own bucket); an in-memory map
  * would reset per isolate and not hold across Cloudflare's many. Without cf-connecting-ip
@@ -52,14 +58,15 @@ import { HOUR_MS, ipv6Net64, overLimit, sha256Hex } from "./rate";
  */
 
 export const AUTH_RATE_PER_HOUR = 10;
-const MAX_FORM = 16 * 1024;
+const MAX_BODY = 16 * 1024;
+const SIGNIN_CODE_TTL_MS = 15 * 60_000;
+const WELCOME_CODE_TTL_MS = 24 * 3_600_000;
+const MAX_NOTE = 1000;
+const MAX_TOKEN_NAME = 100;
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 }
-
-const BAD_LINK_HTML =
-  '<!doctype html><meta charset=utf-8><title>LeanMail</title><p>This sign-in link has expired or was already used. <a href="/">Ask for a new one.</a></p>';
 
 /**
  * A browser navigation, by the rule the container's pages use (lean/Server/Pages/Common.lean):
@@ -121,106 +128,172 @@ function tooMany(): Response {
 }
 
 interface Body {
-  form: boolean;
   text: string;
   fields: Record<string, string>;
 }
 
-/** A JSON or urlencoded body, read once; `text` lets the caller rebuild the request. */
+/** A JSON object, read once; `text` lets the caller rebuild the request. */
 async function readBody(request: Request): Promise<Body | null> {
-  const ct = (request.headers.get("content-type") ?? "").toLowerCase();
   // Bytes, decoded as UTF-8: workerd warns when .text() reads a urlencoded body.
   const bytes = await request.arrayBuffer();
-  if (bytes.byteLength > MAX_FORM) return null;
+  if (bytes.byteLength > MAX_BODY) return null;
   const text = new TextDecoder().decode(bytes);
-  if (ct.includes("application/x-www-form-urlencoded")) {
-    return { form: true, text, fields: Object.fromEntries(new URLSearchParams(text)) };
-  }
   try {
     const v = JSON.parse(text || "{}");
     if (!v || typeof v !== "object" || Array.isArray(v)) return null;
     const fields: Record<string, string> = {};
     for (const [k, x] of Object.entries(v)) if (typeof x === "string") fields[k] = x;
-    return { form: false, text, fields };
+    return { text, fields };
   } catch {
     return null;
   }
 }
 
-/** The same request with another path (and the body already read). */
-function rebuild(request: Request, path: string, text: string): Request {
-  const url = new URL(request.url);
-  url.pathname = path;
-  return new Request(url, { method: request.method, headers: request.headers, body: text });
-}
-
 const EMAIL_RE = /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[^\s@<>()",;:]+$/;
 
+/** An address fit to be an account's, normalised; else null. */
+function emailOf(raw: string | undefined): string | null {
+  const e = normAddress(raw ?? "");
+  return e.length <= 254 && EMAIL_RE.test(e) ? e : null;
+}
+
 /** An active account's id for this email, else null (unknown, pending and disabled alike). */
-async function activeAccount(env: Env, email: string | undefined): Promise<string | null> {
+async function activeAccount(env: Env, email: string | null): Promise<string | null> {
   if (!email) return null;
-  const e = normAddress(email);
-  if (!EMAIL_RE.test(e)) return null;
-  const a = await accountByEmail(env.DB, e);
+  const a = await accountByEmail(env.DB, email);
   return a && a.status === "active" ? a.id : null;
 }
 
-async function login(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  if (await rateLimited(env.DB, "login", request)) return tooMany();
-  const body = await readBody(request);
-  if (!body) return json(400, { error: "bad body" });
-  const email = body.fields.email ? normAddress(body.fields.email) : "";
-  if (!body.form && !EMAIL_RE.test(email)) return json(400, { error: "bad email" });
-  const acct = await activeAccount(env, email);
-  if (acct) {
-    // In the background: waiting on a (possibly cold) container only for known emails would let
-    // response time say which emails have accounts.
-    ctx.waitUntil(
-      callContainer(env, acct, "/internal/auth/magic", { email, purpose: "signin" })
-        .then(async (r) => {
-          await r.body?.cancel();
-          log("auth.login", { outcome: r.ok ? "sent" : "send_failed", acct, status: r.status });
-        })
-        .catch((e) => log("auth.login", { outcome: "container_failed", acct, error: errText(e) })),
-    );
-  } else {
-    log("auth.login", { outcome: "no_active_account" });
+/** What the account's log keeps of a code. `:` is not in an account id, so this is no account's key. */
+function codeHash(env: Env, acct: string, code: string): Promise<string> {
+  return deriveSecret(env.SESSION_SECRET!, `signin-code:${acct}:${code}`);
+}
+
+/** Six random digits. */
+function newCode(): string {
+  return String(crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000).padStart(6, "0");
+}
+
+/** Mint a code and mail it. Never throws: the caller has already answered, or must not differ. */
+async function mailCode(env: Env, acct: string, email: string, kind: SigninKind, now: number): Promise<void> {
+  try {
+    const code = newCode();
+    const ttl = kind === "welcome" ? WELCOME_CODE_TTL_MS : SIGNIN_CODE_TTL_MS;
+    if (await logFor(env, acct).addCode(await codeHash(env, acct, code), now, now + ttl)) {
+      await sendSigninMail(env, acct, email, kind, code, now);
+    } else {
+      log("auth.code_capped", { acct, kind });
+    }
+  } catch (e) {
+    log("auth.code_failed", { acct, kind, error: errText(e) });
   }
-  if (!body.form) return json(202, { ok: true });
-  // The no-JS form: the same answer for every email.
-  return new Response(null, { status: 303, headers: { location: "/signin?sent=1", "cache-control": "no-store" } });
 }
 
-/** POST /auth/code (JSON) and POST /signin/code (form): to the email's account, else the operator. */
-async function code(request: Request, env: Env, path: string): Promise<Response> {
-  if (await rateLimited(env.DB, "code", request)) return tooMany();
+const accepted = () => json(202, { ok: true });
+
+async function login(request: Request, env: Env, ctx: ExecutionContext, now: number): Promise<Response> {
+  if (await rateLimited(env.DB, "login", request, now)) return tooMany();
   const body = await readBody(request);
   if (!body) return json(400, { error: "bad body" });
-  const acct = await activeAccount(env, body.fields.email);
-  // An unknown email goes to the operator too, which has no such account and refuses the code the
-  // way the account would.
-  log("auth.code", { routed: acct ? "account" : "operator" });
-  return proxyTo(env, acct ?? OPERATOR, rebuild(request, path, body.text));
+  const email = emailOf(body.fields.email);
+  if (!email) return json(400, { error: "bad email" });
+  const acct = await activeAccount(env, email);
+  if (acct) ctx.waitUntil(mailCode(env, acct, email, "signin", now));
+  log("auth.login", { active: acct !== null });
+  return accepted();
 }
 
-/** POST /auth/signup: the JSON API is proxied as it is; the sign-up page's form is sent on as JSON. */
-async function signup(request: Request, env: Env): Promise<Response> {
-  const ct = (request.headers.get("content-type") ?? "").toLowerCase();
-  if (!ct.includes("application/x-www-form-urlencoded")) return proxyTo(env, OPERATOR, request);
-  const back = (q: string) => new Response(null, { status: 303, headers: { location: `/signup${q}`, "cache-control": "no-store" } });
+/** POST /auth/code: spend the code, and the account gets a new token on its list. */
+async function redeem(request: Request, env: Env, now: number): Promise<Response> {
+  if (!env.SESSION_SECRET) return json(503, { error: "not configured" });
+  if (await rateLimited(env.DB, "code", request, now)) return tooMany();
   const body = await readBody(request);
-  if (!body) return back("?error=failed");
-  const h = new Headers(request.headers);
-  h.set("content-type", "application/json");
-  const json = JSON.stringify({ email: (body.fields.email ?? "").trim(), note: body.fields.note ?? "" });
-  const r = await proxyTo(env, OPERATOR, new Request(request.url, { method: "POST", headers: h, body: json }));
-  await r.body?.cancel();
-  log("auth.signup_form", { status: r.status });
-  if (r.status === 202 || r.status === 200) return back("?sent=1");
-  if (r.status === 400) return back("?error=email");
-  if (r.status === 429) return back("?error=rate");
-  if (r.status === 404) return back("");
-  return back("?error=failed");
+  if (!body) return json(400, { error: "bad body" });
+  const acct = await activeAccount(env, emailOf(body.fields.email));
+  const code = (body.fields.code ?? "").trim();
+  // An unknown email costs what a known one does, so the answer's timing does not say which it was.
+  const target = acct ?? OPERATOR;
+  const spent = /^\d{6}$/.test(code) && (await logFor(env, target).spendCode(await codeHash(env, target, code), now));
+  log("auth.code", { spent });
+  if (!spent || !acct) return json(400, { error: "invalid code" });
+  const name = (body.fields.name ?? "").trim().slice(0, MAX_TOKEN_NAME) || "app";
+  const token = await signMac("lm1", acct, b64uEncode(crypto.getRandomValues(new Uint8Array(32))), env.SESSION_SECRET);
+  await logFor(env, acct).putToken(await sha256Hex(token), ALL_SCOPES, now, name);
+  return json(200, { token }, { "cache-control": "no-store" });
+}
+
+function isAdminEmail(env: Env, email: string): boolean {
+  return (env.ADMIN_EMAILS ?? "").split(",").some((a) => a.trim() !== "" && normAddress(a) === email);
+}
+
+async function signup(request: Request, env: Env, ctx: ExecutionContext, now: number): Promise<Response> {
+  const mode = env.SIGNUP_MODE;
+  if (mode === "closed") return json(404, { error: "not_found" });
+  if (await rateLimited(env.DB, "signup", request, now)) return json(429, { error: "too many sign-ups" }, { "retry-after": "3600" });
+  const body = await readBody(request);
+  if (!body) return json(400, { error: "bad body" });
+  const email = emailOf(body.fields.email);
+  if (!email) return json(400, { error: "bad email" });
+  if (await accountByEmail(env.DB, email)) {
+    log("auth.signup", { outcome: "exists" });
+    return accepted();
+  }
+  const auto = mode === "open" || isAdminEmail(env, email);
+  const id = ulid(now);
+  // One transaction: the sign-up exists only if this request's account does, whoever won a race.
+  const [made] = await env.DB.batch([
+    env.DB.prepare("INSERT INTO accounts (id, email, status, updated_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(email) DO NOTHING").bind(id, email, auto ? "active" : "pending", now),
+    env.DB.prepare(
+      `INSERT INTO signups (id, account_id, email, note, created_at, decided_at, decision)
+       SELECT ?1, ?1, ?2, ?3, ?4, ?5, ?6 WHERE EXISTS (SELECT 1 FROM accounts WHERE id = ?1)`,
+    ).bind(id, email, (body.fields.note ?? "").slice(0, MAX_NOTE), now, auto ? now : null, auto ? "approved" : null),
+  ]);
+  const created = (made?.meta.changes ?? 0) > 0;
+  log("auth.signup", { outcome: created ? (auto ? "approved" : "pending") : "exists" });
+  if (created && auto) ctx.waitUntil(mailCode(env, id, email, "welcome", now));
+  return accepted();
+}
+
+/** The account's email when it is an admin's, else null. */
+async function adminEmail(env: Env, acct: string): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT email FROM accounts WHERE id = ?1").bind(acct).first<{ email: string }>();
+  return row && isAdminEmail(env, normAddress(row.email)) ? row.email : null;
+}
+
+/** /admin/signups: an admin's API token decides them, and only undecided ones. */
+async function signups(request: Request, env: Env, ctx: ExecutionContext, path: string, now: number): Promise<Response> {
+  const who = await callerOf(request, env);
+  if (!who) return json(401, { error: "unauthorized" });
+  const reading = request.method === "GET";
+  if (!who.scopes.includes(reading ? "read" : "act")) return json(403, { error: "insufficient_scope" });
+  if (!(await adminEmail(env, who.acct))) return json(403, { error: "forbidden" });
+  if (path === "/admin/signups") {
+    if (!reading) return json(405, { error: "method_not_allowed" });
+    const { results } = await env.DB.prepare("SELECT id, email, note, created_at FROM signups WHERE decision IS NULL ORDER BY created_at DESC LIMIT 500").all();
+    return json(200, { items: results });
+  }
+  const m = /^\/admin\/signups\/([^/]+)\/(approve|reject)$/.exec(path);
+  if (!m) return json(404, { error: "not_found" });
+  if (request.method !== "POST") return json(405, { error: "method_not_allowed" });
+  const approve = m[2] === "approve";
+  const row = await env.DB.prepare("SELECT account_id, email FROM signups WHERE id = ?1").bind(m[1]!).first<{ account_id: string; email: string }>();
+  if (!row) return json(404, { error: "not_found" });
+  const [decided, account] = await env.DB.batch([
+    env.DB.prepare("UPDATE signups SET decision = ?2, decided_at = ?3 WHERE id = ?1 AND decision IS NULL").bind(m[1]!, approve ? "approved" : "rejected", now),
+    approve
+      ? env.DB.prepare(
+          `UPDATE accounts SET status = 'active', updated_at = ?2 WHERE id = ?1 AND status = 'pending'
+           AND EXISTS (SELECT 1 FROM signups WHERE account_id = ?1 AND decided_at = ?2 AND decision = 'approved')`,
+        ).bind(row.account_id, now)
+      : env.DB.prepare(
+          `DELETE FROM accounts WHERE id = ?1 AND status = 'pending'
+           AND EXISTS (SELECT 1 FROM signups WHERE account_id = ?1 AND decided_at = ?2 AND decision = 'rejected')`,
+        ).bind(row.account_id, now),
+  ]);
+  if (!decided?.meta.changes) return json(409, { error: "already decided" });
+  log("auth.signup_decided", { decision: m[2], by: who.acct });
+  if (approve && account?.meta.changes) ctx.waitUntil(mailCode(env, row.account_id, row.email, "welcome", now));
+  return json(200, { ok: true, account_id: row.account_id });
 }
 
 export const PASSKEY_CHALLENGE_TTL_MS = 5 * 60_000;
@@ -292,7 +365,7 @@ async function passkeyLogin(request: Request, env: Env): Promise<Response> {
     return json(401, { error: "passkey not accepted" });
   };
   const body = await readBody(request);
-  if (!body || body.form) return json(400, { error: "bad body" });
+  if (!body) return json(400, { error: "bad body" });
   let resp: Record<string, unknown>;
   try {
     const v = JSON.parse(body.text) as { response?: unknown };
@@ -321,24 +394,20 @@ async function passkeyLogin(request: Request, env: Env): Promise<Response> {
 }
 
 /**
- * The public auth routes and `/admin/*`; null for any other request. `/admin/*` needs a
- * MAC-verified `lm_session` cookie; the operator container checks that its account is an admin.
+ * The public auth routes and `/admin/*`; null for any other request. `/admin/*` other than
+ * sign-ups needs a MAC-verified `lm_session` cookie; the operator container checks that its account
+ * is an admin.
  */
-export async function handleAuth(request: Request, env: Env, ctx: ExecutionContext): Promise<Response | null> {
+export async function handleAuth(request: Request, env: Env, ctx: ExecutionContext, now: number = Date.now()): Promise<Response | null> {
   const url = new URL(request.url);
   const p = url.pathname;
   const m = request.method;
-  if (p === "/auth/signup" && m === "POST") return signup(request, env);
+  if (p === "/auth/signup" && m === "POST") return signup(request, env, ctx, now);
   if (p === "/auth/passkey/challenge" && m === "POST") return passkeyChallenge(env);
   if (p === "/auth/passkey/login" && m === "POST") return passkeyLogin(request, env);
-  if (p === "/auth/login" && m === "POST") return login(request, env, ctx);
-  if (p === "/auth/code" && m === "POST") return code(request, env, "/auth/code");
-  if (p === "/signin/code" && m === "POST") return code(request, env, "/signin/code");
-  if (p === "/auth/magic" && m === "GET") {
-    const v = await verifyMac(url.searchParams.get("t") ?? "", env.SESSION_SECRET, ["v1"]);
-    if (!v) return new Response(BAD_LINK_HTML, { status: 400, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
-    return proxyTo(env, v.acct, request);
-  }
+  if (p === "/auth/login" && m === "POST") return login(request, env, ctx, now);
+  if (p === "/auth/code" && m === "POST") return redeem(request, env, now);
+  if (p === "/admin/signups" || p.startsWith("/admin/signups/")) return signups(request, env, ctx, p, now);
   if (p === "/admin" || p.startsWith("/admin/")) {
     const acct = await accountFromRequest(request, env.SESSION_SECRET, { bearer: false });
     const nav = isNavigation(request);

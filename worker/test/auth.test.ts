@@ -144,48 +144,7 @@ describe("item 4: POST /internal/wake/:acct {provision}", () => {
 });
 
 describe("item 5: public auth routes", () => {
-  it("POST /auth/signup goes to the operator with cf-connecting-ip, and nothing client-stamped", async () => {
-    const { e, calls } = stubbed(() => Response.json({ ok: true }, { status: 202 }));
-    const r = await fetchVia(e, "/auth/signup", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.9" }, body: JSON.stringify({ email: "s@x.example" }) });
-    expect(r.status).toBe(202);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ name: "_operator", acct: "_operator", path: "/auth/signup" });
-    expect(calls[0]!.headers["cf-connecting-ip"]).toBe("203.0.113.9");
-  });
-
-  it("POST /auth/login answers 202 to all, asking only an active account's container for a link", async () => {
-    await activeAccount("a1", "alice@x.example");
-    await activeAccount("p1", "pending@x.example", "pending");
-    const { e, calls } = stubbed(() => Response.json({ ok: true }, { status: 202 }));
-    const post = (email: string, ip: string) =>
-      fetchVia(e, "/auth/login", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": ip }, body: JSON.stringify({ email }) });
-    const { lines } = await captureLogs(async () => {
-      for (const [email, ip] of [["Alice@X.example", "1.1.1.1"], ["nobody@x.example", "1.1.1.2"], ["pending@x.example", "1.1.1.3"]] as const) {
-        const r = await post(email, ip);
-        expect(r.status).toBe(202);
-        expect(await r.json()).toEqual({ ok: true });
-      }
-    });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ name: "a1", acct: "a1", method: "POST", path: "/internal/auth/magic" });
-    expect(JSON.parse(calls[0]!.body)).toEqual({ email: "alice@x.example", purpose: "signin" });
-    expect(lines.filter((l) => l.ev === "auth.login").map((l) => l.outcome).sort()).toEqual(["no_active_account", "no_active_account", "sent"]);
-    expect(JSON.stringify(lines)).not.toMatch(/@/);
-    expect((await post("not-an-email", "1.1.1.4")).status).toBe(400);
-  });
-
-  it("POST /auth/login with the no-JS form answers 303 /signin?sent=1 for any email", async () => {
-    await activeAccount("a1", "alice@x.example");
-    const { e, calls } = stubbed();
-    for (const email of ["alice@x.example", "nobody@x.example"]) {
-      const r = await fetchVia(e, "/auth/login", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ email }).toString() });
-      expect(r.status).toBe(303);
-      expect(r.headers.get("location")).toBe("/signin?sent=1");
-    }
-    expect(calls.map((c) => `${c.acct} ${c.path}`)).toEqual(["a1 /internal/auth/magic"]);
-  });
-
-  it("rate-limits /auth/login and the code routes to 10 an hour per client IP", async () => {
+  it("rate-limits /auth/login and /auth/code to 10 an hour per client IP, each on its own", async () => {
     const { e } = stubbed();
     const login = (ip: string) => fetchVia(e, "/auth/login", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": ip }, body: '{"email":"x@x.example"}' });
     for (let i = 0; i < AUTH_RATE_PER_HOUR; i++) expect((await login("9.9.9.9")).status).toBe(202);
@@ -193,13 +152,9 @@ describe("item 5: public auth routes", () => {
     expect(r.status).toBe(429);
     expect(r.headers.get("retry-after")).toBe("3600");
     expect((await login("9.9.9.8")).status).toBe(202);
-    // Codes count separately from logins, and the two code routes share one bucket.
-    const code = (path: string, body: string, ct: string) => fetchVia(e, path, { method: "POST", headers: { "content-type": ct, "cf-connecting-ip": "9.9.9.9" }, body });
-    for (let i = 0; i < AUTH_RATE_PER_HOUR / 2; i++) {
-      expect((await code("/auth/code", '{"email":"x@x.example","code":"123456"}', "application/json")).status).toBe(200);
-      expect((await code("/signin/code", "email=x%40x.example&code=123456", "application/x-www-form-urlencoded")).status).toBe(200);
-    }
-    expect((await code("/auth/code", '{"email":"x@x.example","code":"123456"}', "application/json")).status).toBe(429);
+    const code = () => fetchVia(e, "/auth/code", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "9.9.9.9" }, body: '{"email":"x@x.example","code":"123456"}' });
+    for (let i = 0; i < AUTH_RATE_PER_HOUR; i++) expect((await code()).status).toBe(400);
+    expect((await code()).status).toBe(429);
     // Only the IP's hash is stored.
     const keys = (await env.DB.prepare("SELECT key FROM auth_rate").all<{ key: string }>()).results.map((r) => r.key);
     expect(keys.every((k) => /^(login|code):[0-9a-f]{64}$/.test(k))).toBe(true);
@@ -208,33 +163,6 @@ describe("item 5: public auth routes", () => {
     await captureLogs(() => dailyTick(env, async () => {}));
     expect((await env.DB.prepare("SELECT count(*) AS n FROM auth_rate").first())!.n).toBe(0);
   });
-
-  it("GET /auth/magic?t= goes to the account its MAC names; a bad link is a 400 page", async () => {
-    const { e, calls } = stubbed(() => new Response(null, { status: 302, headers: { location: "/", "set-cookie": "lm_session=x" } }));
-    const t = await signMac("v1", "a1", "rand.9999999999999", S);
-    const r = await fetchVia(e, `/auth/magic?t=${encodeURIComponent(t)}`);
-    expect(r.status).toBe(302);
-    expect(calls[0]).toMatchObject({ acct: "a1", path: "/auth/magic", search: `?t=${encodeURIComponent(t)}` });
-    const forged = await signMacWithKey("v1", "b1", "rand.1", await deriveSecret(S, "a1"));
-    for (const bad of [forged, "v1.a1.x.y", "", await signMac("lm1", "a1", "r", S)]) {
-      const b = await fetchVia(e, `/auth/magic?t=${encodeURIComponent(bad)}`);
-      expect(b.status).toBe(400);
-      expect(b.headers.get("content-type")).toContain("text/html");
-    }
-    expect(calls).toHaveLength(1);
-  });
-
-  it("POST /auth/code and /signin/code go to the email's active account, else the operator", async () => {
-    await activeAccount("a1", "alice@x.example");
-    const { e, calls } = stubbed();
-    await fetchVia(e, "/auth/code", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "ALICE@x.example", code: "123456", name: "phone" }) });
-    await fetchVia(e, "/auth/code", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "who@x.example", code: "123456" }) });
-    await fetchVia(e, "/signin/code", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "email=alice%40x.example&code=123456" });
-    await fetchVia(e, "/signin/code", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "email=who%40x.example&code=123456" });
-    expect(calls.map((c) => `${c.acct} ${c.path}`)).toEqual(["a1 /auth/code", "_operator /auth/code", "a1 /signin/code", "_operator /signin/code"]);
-    expect(JSON.parse(calls[0]!.body)).toEqual({ email: "ALICE@x.example", code: "123456", name: "phone" });
-    expect(calls[2]!.body).toBe("email=alice%40x.example&code=123456");
-  });
 });
 
 describe("item 6: /admin/*", () => {
@@ -242,13 +170,13 @@ describe("item 6: /admin/*", () => {
     const { e: e0, calls } = stubbed();
     const e = { ...e0, PUBLIC_ORIGIN: ORIGIN } as Env;
     const cookie = `lm_session=${await signMac("v1", "a1", "sid.9999999999999.0", S)}`;
-    await fetchVia(e, "/admin/signups", { headers: { cookie, accept: "application/json", "x-admin-account": "evil" } });
-    await fetchVia(e, "/admin/signups/01J/approve", { method: "POST", headers: { cookie, origin: ORIGIN, accept: "text/html", "x-requested-with": "LeanMail" } });
-    await fetchVia(e, "/admin/signups", { headers: { cookie, accept: "text/html,application/xhtml+xml" } });
+    await fetchVia(e, "/admin/accounts", { headers: { cookie, accept: "application/json", "x-admin-account": "evil" } });
+    await fetchVia(e, "/admin/accounts/a2/disable", { method: "POST", headers: { cookie, origin: ORIGIN, accept: "text/html", "x-requested-with": "LeanMail" } });
+    await fetchVia(e, "/admin/accounts", { headers: { cookie, accept: "text/html,application/xhtml+xml" } });
     expect(calls.map((c) => `${c.name} ${c.acct} ${c.method} ${c.path} ${c.adminAccount ?? "-"}`)).toEqual([
-      "_operator _operator GET /admin/signups a1",
-      "_operator _operator POST /admin/signups/01J/approve a1",
-      "a1 a1 GET /admin/signups -",
+      "_operator _operator GET /admin/accounts a1",
+      "_operator _operator POST /admin/accounts/a2/disable a1",
+      "a1 a1 GET /admin/accounts -",
     ]);
   });
 
@@ -256,9 +184,9 @@ describe("item 6: /admin/*", () => {
     const { e, calls } = stubbed();
     const bearer = `Bearer ${await signMac("lm1", "a1", "r", S)}`;
     const forged = `lm_session=${await signMacWithKey("v1", "a1", "sid.1.0", S)}`;
-    expect((await fetchVia(e, "/admin/signups", { headers: { accept: "application/json", "x-admin-account": "a1" } })).status).toBe(401);
-    expect((await fetchVia(e, "/admin/signups", { headers: { accept: "application/json", authorization: bearer } })).status).toBe(401);
-    expect((await fetchVia(e, "/admin/signups", { headers: { accept: "application/json", cookie: forged } })).status).toBe(401);
+    expect((await fetchVia(e, "/admin/accounts", { headers: { accept: "application/json", "x-admin-account": "a1" } })).status).toBe(401);
+    expect((await fetchVia(e, "/admin/accounts", { headers: { accept: "application/json", authorization: bearer } })).status).toBe(401);
+    expect((await fetchVia(e, "/admin/accounts", { headers: { accept: "application/json", cookie: forged } })).status).toBe(401);
     const nav = await fetchVia(e, "/admin/accounts", { headers: { accept: "text/html" } });
     expect(nav.status).toBe(302);
     expect(nav.headers.get("location")).toBe("/signin");
@@ -345,11 +273,7 @@ describe("M9b: passkey login", () => {
     expect(calls).toEqual([]);
   });
 
-  it("a challenge is not a magic link, and a magic link or cookie is not a challenge", async () => {
-    const { e, calls } = stubbed();
-    const ch = await mintPasskeyChallenge(S);
-    expect((await fetchVia(e, `/auth/magic?t=${encodeURIComponent(ch)}`)).status).toBe(400);
-    expect(calls).toEqual([]);
+  it("a magic link or cookie is not a challenge", async () => {
     const link = await signMac("v1", "a1", `rand.${Date.now() + 60_000}`, S);
     expect(await verifyPasskeyChallenge(link, S)).toBe(false);
     // a 4-part v1 token under an account's key is not one either
@@ -414,26 +338,6 @@ describe("M9b: the sign-up page", () => {
       "_operator POST /signup",
       "a1 GET /signup",
     ]);
-  });
-
-  it("the form POST /auth/signup reaches the operator as JSON and answers 303 by the outcome", async () => {
-    let status = 202;
-    const { e, calls } = stubbed(() => Response.json({ ok: status === 202 }, { status }));
-    const post = () =>
-      fetchVia(e, "/auth/signup", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "cf-connecting-ip": "203.0.113.7" }, body: "email=+new%40x.example+&note=hello+there" });
-    const r = await post();
-    expect(r.status).toBe(303);
-    expect(r.headers.get("location")).toBe("/signup?sent=1");
-    expect(calls[0]).toMatchObject({ acct: "_operator", method: "POST", path: "/auth/signup" });
-    expect(calls[0]!.headers["content-type"]).toBe("application/json");
-    expect(calls[0]!.headers["cf-connecting-ip"]).toBe("203.0.113.7");
-    expect(JSON.parse(calls[0]!.body)).toEqual({ email: "new@x.example", note: "hello there" });
-    const where: string[] = [];
-    for (const s of [400, 429, 404, 500]) {
-      status = s;
-      where.push((await post()).headers.get("location") ?? "");
-    }
-    expect(where).toEqual(["/signup?error=email", "/signup?error=rate", "/signup", "/signup?error=failed"]);
   });
 });
 

@@ -2,14 +2,21 @@ import Lean.Data.Json
 import Server.Router.Types
 import Server.Auth.Tokens
 import Server.Auth.Session
+import Server.Worker
 import Server.Clock
+import Server.Log
 
 /-! # API tokens
 
 `lm1.<acct>.<rand>.<mac>`, minted in Settings (or by `POST /auth/code` for the apps), shown
 once, stored as `sha256` of the whole token with a name and scopes (`read draft send act junk`).
 A bearer request passes `.token scope` when the MAC verifies, the hash is known and not revoked,
-and the scope is among the token's. `last_used_at` moves at most once an hour. -/
+and the scope is among the token's. `last_used_at` moves at most once an hour.
+
+The Worker answers `/sync` without this container (`worker/src/sync.ts`), so it keeps its own list
+of tokens: minting and revoking both tell it (`/internal/tokens`). A token it never heard of is
+only refused there, so a failed registration is a warning. A failed revocation is not: the token
+would go on reading mail, so the Worker hears first and the row changes only once it has. -/
 
 namespace Server.Auth.ApiTokens
 
@@ -31,6 +38,9 @@ def mint (st : State) (name : String) (scopes : List String) : IO (String × Str
   let tok := Tokens.mintApi st.config (← Crypto.randomToken 32)
   st.db.exec "INSERT INTO api_tokens(id, token_hash, name, scopes, created_at) VALUES (?, ?, ?, ?, ?)"
     #[id, Tokens.hash tok, String.ofList (name.toList.take 100), (scopesJson scopes).compress, ← Clock.nowMs]
+  let body := Json.mkObj [("hash", Json.str (Crypto.toHex (Tokens.hash tok))), ("scopes", scopesJson scopes)]
+  if (← Worker.internal st "/internal/tokens" body (method := "PUT")).isNone then
+    Log.warn "tokens.register_failed" [("id", Json.str id)]
   return (id, tok)
 
 /-- The token in `Authorization: Bearer`, if it grants `scope`. -/
@@ -71,8 +81,14 @@ def create (c : Ctx) (req : Req) : IO Resp := do
   return Resp.json 201 <| Json.mkObj [("id", Json.str id), ("token", Json.str tok), ("scopes", scopesJson scopes)]
 
 def revoke (c : Ctx) (_ : Req) : IO Resp := do
-  c.st.db.exec "UPDATE api_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL" #[← Clock.nowMs, c.param "id"]
-  if (← c.st.db.changes) == 0 then return Resp.notFound
+  let id := c.param "id"
+  let some row ← c.st.db.queryOne "SELECT token_hash FROM api_tokens WHERE id = ? AND revoked_at IS NULL" #[id]
+    | return Resp.notFound
+  let body := Json.mkObj [("hash", Json.str (Crypto.toHex (row.blob "token_hash")))]
+  -- a bare local server has no Worker to hear of it, and no /sync to keep serving the token
+  if (← Worker.internal c.st "/internal/tokens/revoke" body).isNone && !c.st.config.bareDev then
+    return Resp.error 502 "could not revoke, try again"
+  c.st.db.exec "UPDATE api_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL" #[← Clock.nowMs, id]
   return Resp.okStatus
 
 def routes : Array Route := #[

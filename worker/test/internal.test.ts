@@ -311,7 +311,10 @@ describe("scheduled", () => {
       ticked.push(acct);
       if (acct === "a03") throw new Error("boom");
     };
-    const { result, lines } = await captureLogs(() => dailyTick(env, tick));
+    // Each lane sweeps before it ticks. A real sweep takes as long as it likes, which keeps the lanes
+    // from ever being in `tick` together, so here it takes no time.
+    const LOG = { idFromName: (n: string) => n, get: () => ({ sweep: async () => 0, gmailEnsureAlarm: async () => {} }) };
+    const { result, lines } = await captureLogs(() => dailyTick({ ...env, LOG } as unknown as Env, tick));
     expect(result).toEqual({ ok: 11, failed: 1 });
     expect(ticked.sort()).toEqual(ids);
     expect(peak).toBe(5);

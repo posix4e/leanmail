@@ -398,6 +398,12 @@ def authChecks (t : IO.Ref Tally) : IO Unit := do
   let tokR ← send "POST" "/api/tokens" (ck ++ csrfH) "{\"name\":\"cli\",\"scopes\":[\"read\"]}"
   let tok := jget tokR "token"
   check t "POST /api/tokens returns an lm1 token once" (tokR.status == 201 && tok.startsWith "lm1.acct1.")
+  let tokHash := Crypto.toHex (Auth.Tokens.hash tok)
+  let toWorker (path : String) : IO (List (String × Lean.Json)) := do
+    return (← calls.get).toList.filterMap fun c => if c.2.1 == path then some (c.1, c.2.2) else none
+  check t "a minted token is registered with the Worker by hash, with its scopes" <|
+    (← toWorker "/internal/tokens").any fun (m, j) => m == "PUT" &&
+      (j.getObjValAs? String "hash").toOption == some tokHash && !(j.compress.contains tok) && j.compress.contains "\"read\""
   let bearer := [("authorization", s!"Bearer {tok}")]
   let bm ← send "GET" "/api/msgs" bearer
   let bImp ← send "POST" "/api/import" bearer "From: a@b\r\n\r\nx"
@@ -409,9 +415,19 @@ def authChecks (t : IO.Ref Tally) : IO Unit := do
   check t "a tampered bearer token is 401" (bTamper.status == 401)
   let lst ← send "GET" "/api/tokens" ck
   check t "GET /api/tokens lists the token without the secret" (lst.status == 200 && !(lst.bodyText.contains tok) && lst.bodyText.contains "\"cli\"")
+  -- the Worker has to hear of a revocation, or /sync would go on serving the token: nothing is
+  -- marked until it has, so the client can try again
+  let delDown ← Router.dispatch { st with worker := { call := fun _ _ _ => pure none } } routes
+    { method := "DELETE", path := ["api", "tokens", jget tokR "id"], headers := base ++ ck ++ csrfH }
+  let bmDown ← send "GET" "/api/msgs" bearer
+  check t "a revocation the Worker did not hear of fails and leaves the token alive" (delDown.status == 502 && bmDown.status == 200)
   let del ← send "DELETE" ("/api/tokens/" ++ jget tokR "id") (ck ++ csrfH)
   let bm2 ← send "GET" "/api/msgs" bearer
   check t "a revoked API token stops working" (del.status == 200 && bm2.status == 401)
+  check t "the Worker hears of the revocation by the same hash" <|
+    (← toWorker "/internal/tokens/revoke").any fun (m, j) => m == "POST" && (j.getObjValAs? String "hash").toOption == some tokHash
+  let delAgain ← send "DELETE" ("/api/tokens/" ++ jget tokR "id") (ck ++ csrfH)
+  check t "revoking twice is a 404" (delAgain.status == 404)
   -- the 6-digit code
   calls.set #[]
   discard <| send "POST" "/internal/auth/magic" internalH "{\"email\":\"alex@example.test\",\"purpose\":\"signin\"}"
