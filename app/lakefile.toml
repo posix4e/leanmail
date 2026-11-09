@@ -6,7 +6,7 @@ defaultTargets = ["LeanMailApp", "Gate"]
 [[require]]
 name = "leannative"
 git = "https://github.com/LeanNative/leannative.git"
-rev = "59f62db5059597093b8318941e5e6e02ae745704"
+rev = "eb8428cf555d9e7b4e71dbe20a495545859d341e"
 subDir = "framework/lean"
 
 [[require]]
