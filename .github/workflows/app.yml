@@ -15,9 +15,9 @@ permissions:
 
 jobs:
   app:
-    uses: LeanNative/leannative/.github/workflows/ios-app.yml@59f62db5059597093b8318941e5e6e02ae745704
+    uses: LeanNative/leannative/.github/workflows/ios-app.yml@eb8428cf555d9e7b4e71dbe20a495545859d341e
     with:
-      leannative: 59f62db5059597093b8318941e5e6e02ae745704
+      leannative: eb8428cf555d9e7b4e71dbe20a495545859d341e
       lean-packages: lean app
       build-targets: |
         app leanmail-app-cli
